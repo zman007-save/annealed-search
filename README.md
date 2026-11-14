@@ -1,7 +1,7 @@
 # annealed-search
 
 **SearchHack (Telem AI) — Nov 14, 2026.** Article search that uses simulated
-quantum annealing (QUBO) to find the best articles. Private repo:
+quantum annealing (QUBO) to find the best articles. Public repo:
 https://github.com/zman007-save/annealed-search
 
 ## What it does
@@ -322,7 +322,7 @@ git branch -M main
 git push -u origin main
 ```
 
-The repo is **private**. `.env` is gitignored and is not in the commit.
+The repo is **public**. `.env` is gitignored and is not in the commit.
 GitHub will require 2FA on this account before Nov 28, 2026.
 
 ## Still needed for the 4:15pm PT submission
