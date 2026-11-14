@@ -38,9 +38,12 @@ Exposes the Tavily search controls from the kickoff slides as UI parameters —
   and ranks across both. Articles found by both a wave round and the meta
   pass earn the +0.05 cross-validation bonus in the net score (below).
 - **Net score** — one combined number per article: `net = relevance −
-  redundancy_avg + meta bonus + wave bonus`. Meta bonus +0.05 for
+  redundancy_max (worst twin) + meta bonus + wave bonus`. Meta bonus +0.05 for
   cross-validation (wave + meta); wave bonus +0.01 per extra distinct wave
-  round, max +0.05. The top 10 is ranked by net score.
+  round, max +0.05. The top 10 is ranked by net score. Redundancy here is
+  the single most similar other article (max Jaccard), not the mean — the
+  mean barely varies among top articles, so it let near-twins top the
+  ranking while the annealer threw them out of the set.
 
 ## QUBO mapping
 
@@ -56,14 +59,19 @@ best set:
 - Objective: minimize energy. Solved with
   `dwave.samplers.SimulatedAnnealingSampler`, 100 reads, on CPU.
 - Net score (display ranking, same combined signal approximately): `net =
-  relevance − redundancy_avg + meta bonus + wave bonus`, where
-  `redundancy_avg` is the article's mean Jaccard similarity to the other
-  articles (same similarities, same 0.05 threshold as the QUBO couplings),
-  meta bonus is +0.05 for articles found by both a wave round and the meta
-  pass, and wave bonus is +0.01 per extra distinct wave round (max +0.05).
-  Approximately: the QUBO penalizes similarity to the *selected* set, net
-  penalizes mean similarity to *all* articles — see the combined-score run
-  below for what that difference does to the top 10 vs the best set.
+  relevance − redundancy_max + meta bonus + wave bonus`, where
+  `redundancy_max` is the article's worst twin — its highest Jaccard
+  similarity to any single other article (same similarities, same 0.05
+  threshold as the QUBO couplings), meta bonus is +0.05 for articles found
+  by both a wave round and the meta pass, and wave bonus is +0.01 per extra
+  distinct wave round (max +0.05). The mean was tried first and failed:
+  it barely varies among top articles (0.052–0.064), so net stayed a
+  relevance ranking and the top 10 overlapped the best set 0/10. The worst
+  twin is what actually knocks a top article out of the set, so it is what
+  net charges. What remains different: the QUBO penalizes similarity to
+  the *selected* set as it forms, net is a per-article standalone number —
+  see the worst-twin run below for what that difference does to the top 10
+  vs the best set.
 
 ## Problems it addresses (kickoff slides)
 
@@ -210,6 +218,53 @@ Observed end to end:
   its own" vs "a good addition to this set". The likely next step, if the
   lists should agree: rank by redundancy_max (worst twin) instead of the
   mean. Log: `runs/run-1000-combined-2026-11-14.json`.
+
+## Verified live test — 1,010 articles, net score uses worst-twin redundancy (Nov 14, ~1:32pm PT)
+
+Same prompt and settings as the combined run — **"AI search agents 2026"**
+(advanced depth, 40 wave rounds, max_results 50, mantra + meta-search on) —
+with two changes: the net score's redundancy term is now redundancy_max
+(the worst twin) instead of redundancy_avg, and articles with an empty
+title are dropped from the candidate pool before scoring (a result with no
+title is not a real article — the combined run had five empty-title
+ppc.land Telem hits, one of which sat at position 46 of the best-set
+headline).
+
+**net = relevance − redundancy_max + meta bonus + wave bonus**, where
+redundancy_max is the article's highest Jaccard similarity to any single
+other article (same similarities, same 0.05 coupling threshold as the
+QUBO). The dashboard legend and the per-article net breakdown now show
+the worst twin instead of the mean.
+
+Observed end to end:
+
+- **902 unique candidates** (34 extracted). Filter dropped 32 listing
+  pages, 663 duplicate URLs, 132 duplicate titles, and 20 empty-title
+  results. Zero empty-title articles remain in the candidates or the best
+  set — the five empty-title ppc.land hits from the combined run are gone
+  (the one ppc.land result in this run has a real title and is not
+  selected).
+- QUBO: **902 variables, 172,063 redundancy couplings, 100 annealing
+  reads, best energy −9.1684, 50 articles in the best set, 6/100 reads
+  converged to the optimum.** Total: ~39.5 s.
+- Top 10 by net score: 0.759–0.823. Net-score distribution for the run:
+  mean 0.489, σ 0.188.
+- **Honest result: the overlap improved from 0/10 to 2/10.** Two of the
+  top 10 are in the best set (ranks 2 and 6), and the best-selected
+  article by net now ranks 2nd — up from 22nd. 4 selected articles are in
+  the top 25 by net (was 1), 5 in the top 50 (was 3), 8 in the top 100
+  (unchanged). The best set's mean net (0.561) is above the run mean
+  (0.489). The lists still diverge: the worst-twin charge moved the
+  ranking toward the set, but net remains a per-article standalone number
+  while the QUBO is a joint optimization over the set — it penalizes
+  similarity to the *selected* set as it forms, which no single-article
+  score can reproduce. No further terms were stacked on to force the
+  overlap; this is the measured result of the one formula change.
+- Dashboard render check: the actual dashboard JS was executed in node
+  against this run's log — the headline is exactly the 50 selected
+  articles in net-descending order, the separate section is exactly the
+  log's top 10 by net, and no card falls back to a bare URL as its title.
+  Log: `runs/run-1000-maxred-2026-11-14.json`.
 
 ## Verified live test (Nov 14, ~12:20pm PT)
 

@@ -476,7 +476,7 @@ async def search(payload: dict):
         # story can't occupy several top-10 slots under different slugs.
         seen, seen_titles, seen_titles_x, candidates = {}, {}, {}, []
         title_sets, title_index = [], {}
-        filtered = {"listing": 0, "dup_url": 0, "dup_title": 0, "examples": []}
+        filtered = {"listing": 0, "dup_url": 0, "dup_title": 0, "empty_title": 0, "examples": []}
 
         def _ingest(art, round_no=None, from_meta=False):
             url = canonical_url(art["url"])
@@ -503,6 +503,13 @@ async def search(payload: dict):
                 filtered["dup_url"] += 1
                 return
             title = norm_title(art.get("title", ""))
+            if not title:
+                # A result with no title is not a real article (e.g. a
+                # bare ppc.land Telem hit that once sat at position 46
+                # of the best-set headline). Drop it before scoring so
+                # it can't occupy a best-set slot.
+                filtered["empty_title"] += 1
+                return
             slug = urlparse(url).path.rstrip("/").split("/")[-1]
             key = (urlparse(url).netloc, title)
             if title and key in seen_titles:
@@ -646,13 +653,18 @@ async def search(payload: dict):
         art["redundancy_max"] = red["max"]
         art["redundancy_avg"] = red["avg"]
     # -- Net score: one combined number per article --------------------
-    # net = relevance − redundancy_avg + meta_bonus + wave_bonus.
-    # Same Jaccard similarities (same 0.05 coupling threshold) the QUBO
-    # penalises, so the top 10 and the annealed best set now rank by the
-    # same combined signal. Components stay visible per article.
+    # net = relevance − redundancy_max + meta_bonus + wave_bonus.
+    # redundancy_max is the WORST twin: the single most similar other
+    # article (same Jaccard similarities, same 0.05 coupling threshold
+    # as the QUBO). The mean barely varies among top articles
+    # (0.052–0.064 in the 926-article run), so it let near-twins top
+    # the ranking while the annealer threw them out of the set (0/10
+    # overlap). The worst twin is what actually knocks a top article
+    # out of the best set, so it is what the net score charges.
+    # Components stay visible per article.
     for art in anneal_set:
         art["net_score"] = round(
-            art["relevance"] - art["redundancy_avg"]
+            art["relevance"] - art["redundancy_max"]
             + art["meta_bonus"] + art["wave_bonus"], 3)
     for art in anneal_set:
         art.pop("tokens", None)
@@ -752,10 +764,10 @@ async def search(payload: dict):
         "meta_note": meta_note,
         "net_score_note": (
             "Net score = relevance (0.6×Tavily + 0.4×mantra) − redundancy "
-            "(mean Jaccard similarity vs the other articles, same 0.05 "
-            "threshold as the QUBO couplings) + meta bonus (+0.05 if found "
-            "by both a wave round and the meta pass) + wave bonus (+0.01 "
-            "per extra distinct wave round, max +0.05). The top 10 is "
+            "(worst-twin Jaccard similarity — the single most similar other "
+            "article, same 0.05 threshold as the QUBO couplings) + meta bonus "
+            "(+0.05 if found by both a wave round and the meta pass) + wave bonus "
+            "(+0.01 per extra distinct wave round, max +0.05). The top 10 is "
             "ranked by net score; the annealed best set optimizes the "
             "same combined signal through the QUBO."
         ),

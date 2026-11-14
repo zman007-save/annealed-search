@@ -268,7 +268,62 @@ this set". Likely next step if the lists should agree: rank by
 redundancy_max (worst twin) instead of the mean. Log:
 runs/run-1000-combined-2026-11-14.json.
 
-## How to add a new result (running-document protocol)
+## Run 5d — "AI search agents 2026" (net score uses worst-twin redundancy, 902 articles)
+
+Same prompt and settings as Run 5c, ~1:32pm PT, with two changes: the net
+score's redundancy term is now redundancy_max (worst twin) instead of
+redundancy_avg, and articles with an empty title are dropped from the
+candidate pool before scoring (the combined run had five empty-title
+ppc.land Telem hits, one of which sat at position 46 of the best-set
+headline; the dashboard's URL-as-title fallback is now only a safety net
+and no longer triggers).
+
+**net = relevance − redundancy_max + meta bonus + wave bonus.** Meta bonus
++0.05 for cross-validation (wave + meta); wave bonus +0.01 per extra
+distinct wave round, max +0.05. Both bonuses unchanged.
+
+- Candidates: 902 unique (34 extracted). Filter dropped 32 listing pages,
+  663 duplicate URLs, 132 duplicate titles, and 20 empty-title results.
+  Zero empty-title articles remain in the candidates or the best set.
+- QUBO: 902 variables, 172,063 redundancy couplings, 100 annealing reads.
+- Best energy: −9.1684. Best set: 50 articles. Converged: 6/100 reads.
+- Total run time: ~39.5 s.
+- Reliability: 539 High / 313 Medium / 50 Low.
+- Net-score distribution: mean 0.489, σ 0.188 (n=902); range −0.400 to 0.823.
+
+### Top 10 by net score (all High, all real articles, ten distinct domains)
+
+| Rank | Net | Rel. | Red. max | Red. avg | Meta+ | Wave+ | Rounds | Article | Selected |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0.823 | 0.881 | 0.158 | 0.060 | 0.05 | 0.05 | 9 | AI Search Agents in 2026: The Future of Google Search \| Xenors — https://xenors.in/tech/ai-search-agents-future-of-search-2026 | No |
+| 2 | 0.800 | 0.869 | 0.089 | 0.042 | 0.00 | 0.02 | 3 | AI Search Agents — AI Pulse — https://inblix.com/article/ai-search-agents-c30899 | Yes |
+| 3 | 0.795 | 0.882 | 0.137 | 0.056 | 0.05 | 0.00 | 1 | Get Cited by AI in 60 Days. AI Search Trends 2026 for Teams - Cairrot — https://cairrot.com/blog/ai-search-trends | No |
+| 4 | 0.784 | 0.893 | 0.109 | 0.048 | 0.00 | 0.00 | 1 | AI search and agents news, 22 October 2026 \| Aiso — https://www.getaiso.com/news/2026-10-22 | No |
+| 5 | 0.776 | 0.812 | 0.096 | 0.048 | 0.05 | 0.01 | 2 | 2026 AI Agents Insight Report \| G2 Insights — https://sell.g2.com/g2-2026-ai-agents-insight-report | No |
+| 6 | 0.769 | 0.872 | 0.103 | 0.046 | 0.00 | 0.00 | 1 | Conversational Search Agents Transform Google Search Box - AI CERTs News — https://www.aicerts.ai/news/conversational-search-agents-transform-google-search-box | Yes |
+| 7 | 0.768 | 0.899 | 0.131 | 0.050 | 0.00 | 0.00 | 1 | AI News May 21 2026: Google IO Gemini 3.5 & AI Search Agents — https://mrreviewai.com/ai-news-digest-may-21-2026 | No |
+| 8 | 0.766 | 0.837 | 0.131 | 0.065 | 0.05 | 0.01 | 2 | Best AI Agents in 2026: Tested, Compared, and Ranked — https://mastra.ai/articles/best-ai-agents | No |
+| 9 | 0.760 | 0.892 | 0.132 | 0.054 | 0.00 | 0.00 | 1 | Top 5 AI search trends for 2026 - Blue Ocean Media — https://blueoceanmedia.co.uk/blog/top-5-ai-search-trends-for-2026 | No |
+| 10 | 0.759 | 0.852 | 0.093 | 0.041 | 0.00 | 0.00 | 1 | BrightEdge Data: AI Search is Reaching a Tipping Point – by End of 2026 Most Online Customers will be AI Agents \| BrightEdge — https://www.brightedge.com/news/press-releases/brightedge-data-ai-search-reaching-tipping-point-ai-agents-2026 | No |
+
+### Honest result: top-10 / best-set overlap improved from 0/10 to 2/10
+
+Two of the top 10 are in the best set (ranks 2 and 6). The best-selected
+article by net now ranks 2nd — up from 22nd. 4 selected articles are in
+the top 25 by net (was 1), 5 in the top 50 (was 3), 8 in the top 100
+(unchanged). The best set's mean net (0.561) is above the run mean (0.489).
+The lists still diverge: charging the worst twin moved the ranking toward
+the set, but net remains a per-article standalone number while the QUBO is
+a joint optimization — it penalizes similarity to the *selected* set as it
+forms, which no single-article score can reproduce. No further terms were
+stacked on to force the overlap; this is the measured result of the one
+formula change plus the empty-title filter. Log:
+runs/run-1000-maxred-2026-11-14.json.
+
+Dashboard render check: the actual dashboard JS was executed in node
+against this run's log — the headline is exactly the 50 selected articles
+in net-descending order, the separate section is exactly the log's top 10
+by net, and no card falls back to a bare URL as its title.
 
 1. Run the query in the dashboard (or via the API) and record: prompt,
    settings (depth, wave rounds, mantra/meta on/off), candidates retrieved,
