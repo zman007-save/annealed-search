@@ -23,7 +23,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
     async def test_defaults_and_token_stripped(self):
         self.assertEqual((await self.request())[0],200)
         s,d=self.calls[0];self.assertNotIn(b'authorization',dict(s['headers']))
-        self.assertEqual((d['max_results'],d['frequency_rounds'],d['meta_search'],d['search_depth']),(5,1,False,'basic'))
+        self.assertEqual((d['max_results'],d['frequency_rounds'],d['meta_search'],d['search_depth']),(5,2,True,'basic'))
     async def test_missing_token(self):
         self.assertEqual((await self.request(headers=[]))[0],401);self.assertEqual(self.calls,[])
     async def test_duplicate_token(self):
@@ -47,7 +47,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
     async def test_body_cap(self):self.assertEqual((await self.request(raw=b'x'*4097))[0],413)
     async def test_type(self):self.assertEqual((await self.request(headers=[(b'authorization',('Bearer '+TOKEN).encode())]))[0],415)
     async def test_payload_bounds(self):
-        for d in [{'query':''},{'query':'x'*181},{'query':4},{'query':'x','frequency_rounds':3},{'query':'x','max_results':11},{'query':'x','max_results':True},{'query':'x','meta_search':True},{'query':'x','search_depth':'premium'},{'query':'x','unknown':'x'},{'query':'x','time_range':'all'},{'query':'x','country':[]},{'query':'x','mantra':1}]:
+        for d in [{'query':''},{'query':'x'*181},{'query':4},{'query':'x','frequency_rounds':11},{'query':'x','max_results':11},{'query':'x','max_results':True},{'query':'x','meta_search':'yes'},{'query':'x','search_depth':'premium'},{'query':'x','unknown':'x'},{'query':'x','time_range':'all'},{'query':'x','country':[]},{'query':'x','mantra':1}]:
             self.assertEqual((await self.request(d))[0],400,d)
         self.assertFalse(self.calls)
     async def test_rate(self):
