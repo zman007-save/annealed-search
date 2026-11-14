@@ -65,14 +65,14 @@ class Guard:
             query = data.get('query')
             if not isinstance(query,str) or not 1 <= len(query.strip()) <= 180:
                 raise ValueError()
-            for name, default, maximum in [('max_results',5,10),('frequency_rounds',1,2)]:
+            for name, default, maximum in [('max_results',5,10),('frequency_rounds',2,10)]:
                 value = data.get(name,default)
                 if type(value) is not int or not 1 <= value <= maximum:
                     raise ValueError()
                 data[name] = value
-            if data.get('meta_search',False) is not False:
+            if type(data.get('meta_search',True)) is not bool:
                 raise ValueError()
-            data['meta_search'] = False
+            data.setdefault('meta_search',True)
             if type(data.get('mantra',True)) is not bool:
                 raise ValueError()
             if data.get('search_depth','basic') not in ('basic','advanced'):
