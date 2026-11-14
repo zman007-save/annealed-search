@@ -6,20 +6,25 @@
 <title>annealed-search — SearchHack</title>
 <style>
   :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3;
-         --dim:#8b949e; --acc:#58a6ff; --grn:#3fb950; --amb:#d29922; --red:#f85149; }
+         --dim:#8b949e; --acc:#58a6ff; --grn:#3fb950; --grn2:#56d364;
+         --amb:#d29922; --red:#f85149; --grey:#6e7681; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text);
          font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
-  header { padding:22px 24px 8px; }
-  header h1 { margin:0; font-size:26px; }
+  header { padding:22px 24px 4px; max-width:1060px; margin:0 auto; }
+  header h1 { margin:0; font-size:28px; }
   header h1 span { color:var(--acc); }
   header p { color:var(--dim); margin:6px 0 0; }
   .badge { display:inline-block; font-size:12px; border:1px solid var(--line);
-           border-radius:20px; padding:3px 10px; color:var(--dim); margin:2px 4px 2px 0; }
+           border-radius:20px; padding:3px 10px; color:var(--dim); margin:6px 4px 0 0; }
   .badge b { color:var(--text); }
-  main { max-width:980px; margin:0 auto; padding:8px 24px 60px; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-           padding:16px; margin:14px 0; }
+  main { max-width:1060px; margin:0 auto; padding:8px 24px 60px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+           padding:18px; margin:14px 0; }
+  .panel h2 { margin:0 0 10px; font-size:18px; }
+  .panel h2 .sub { font-size:13px; color:var(--dim); font-weight:400; }
+  .hero input[type=text] { font-size:19px; padding:14px 16px; }
+  .hero button { font-size:17px; padding:14px 28px; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
   label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
   input[type=text], input[type=number], select {
@@ -27,36 +32,136 @@
     border-radius:6px; padding:8px 10px; font-size:14px; width:100%; }
   .field { flex:1 1 140px; }
   .field.wide { flex:3 1 320px; }
-  button { background:var(--acc); color:#fff; border:0; border-radius:6px;
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px;
            padding:10px 22px; font-size:15px; cursor:pointer; font-weight:600; }
   button:disabled { opacity:.5; cursor:wait; }
   .check { display:flex; align-items:center; gap:6px; font-size:14px; padding:8px 0; }
-  .stages { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
-  .stage { border:1px solid var(--line); border-radius:20px; padding:6px 12px;
-           font-size:13px; color:var(--dim); }
-  .stage.on { border-color:var(--grn); color:var(--grn); }
-  .stage b { color:var(--text); }
-  .energy { font-size:34px; font-weight:700; }
+  #status { color:var(--dim); font-size:14px; min-height:20px; margin:10px 0 0; }
+  .err { color:var(--red); }
+
+  /* ---- animated pipeline stages ---- */
+  .stages { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:14px; }
+  @media (max-width:760px){ .stages{ grid-template-columns:1fr 1fr; } }
+  .stage { border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+           font-size:13px; color:var(--dim); background:#0d1117; transition:border-color .3s, color .3s; }
+  .stage .n { font-weight:700; color:var(--text); display:block; font-size:13px; }
+  .stage .d { font-size:12px; line-height:1.45; display:block; margin-top:3px; min-height:32px; }
+  .stage .bar { height:4px; border-radius:2px; background:#21262d; margin-top:8px; overflow:hidden; }
+  .stage .bar i { display:block; height:100%; width:0; background:var(--acc); transition:width .4s; }
+  .stage.running { border-color:var(--acc); color:var(--text); }
+  .stage.running .bar i { background:var(--acc); animation:pulse 1s infinite alternate; }
+  @keyframes pulse { from { opacity:.55; } to { opacity:1; } }
+  .stage.done { border-color:var(--grn); color:var(--text); }
+  .stage.done .bar i { background:var(--grn); width:100% !important; animation:none; }
+  .stage.done .n::after { content:" ✓"; color:var(--grn); }
+
+  .energy { font-size:38px; font-weight:700; }
   .energy small { font-size:14px; color:var(--dim); font-weight:400; }
   .kv { color:var(--dim); font-size:13px; line-height:1.7; }
   .kv b { color:var(--text); }
   canvas { width:100%; height:140px; background:#0d1117; border:1px solid var(--line);
            border-radius:6px; }
-  .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0; }
+  .note { font-size:12px; color:var(--dim); line-height:1.6; }
+
+  /* ---- score bars + bell curves ---- */
+  .scoregrid { display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; margin:10px 0 4px; }
+  @media (max-width:640px){ .scoregrid{ grid-template-columns:1fr; } }
+  .scorerow { font-size:13px; }
+  .scorerow .lbl { display:flex; justify-content:space-between; color:var(--dim); margin-bottom:3px; }
+  .scorerow .lbl b { color:var(--text); }
+  .sbar { position:relative; height:8px; background:#21262d; border-radius:4px; }
+  .sbar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:4px; background:var(--acc); }
+  .sbar.inv .fill { background:var(--amb); }
+  .sbar .tick { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--text); opacity:.75; }
+  .sbar .ticklbl { position:absolute; top:11px; font-size:10px; color:var(--dim); white-space:nowrap; transform:translateX(-50%); }
+  .sbarwrap { padding-bottom:14px; }
+  .bell { display:block; }
+  .bellrow { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  .bellcap { font-size:12px; color:var(--dim); }
+  .tiertbl { width:100%; border-collapse:collapse; font-size:13px; margin:6px 0; }
+  .tiertbl th, .tiertbl td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  .tiertbl th { color:var(--dim); font-size:12px; }
+
+  .gchip { display:inline-block; font-size:11px; border-radius:4px; padding:2px 7px;
+           margin:2px 4px 2px 0; font-weight:700; }
+  .g-top { background:var(--grn); color:#04160a; }
+  .g-amazing { background:#56d364; color:#04160a; }
+  .g-good { background:#1a7f37; color:#d8ffe0; }
+  .g-medium { background:#30363d; color:var(--text); }
+  .g-mediumrare { background:var(--amb); color:#241a00; }
+  .g-bottom { background:var(--red); color:#fff; }
+  .g-na { background:#30363d; color:var(--dim); }
+
+  .legendgrid { display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; }
+  @media (max-width:760px){ .legendgrid{ grid-template-columns:1fr; } }
+  .legendgrid h3 { margin:0 0 4px; font-size:14px; }
+  .legendgrid p { margin:0 0 6px; font-size:13px; color:var(--dim); line-height:1.55; }
+  .legendgrid p b { color:var(--text); }
+
+  /* ---- Ann Nealer, the quantum annealer robot ---- */
+  .mascot-row { display:flex; gap:16px; align-items:center; margin-top:14px; }
+  .mascot { text-align:center; flex:0 0 auto; }
+  .mascot .bot { width:110px; height:118px; }
+  .mascot .name { font-size:12px; font-weight:700; color:var(--text); margin-top:2px; }
+  .mascot .name span { color:var(--dim); font-weight:400; }
+  .bubble { position:relative; flex:1; background:#0d1117; border:1px solid var(--acc);
+            border-radius:12px; padding:12px 16px; font-size:15px; line-height:1.5; min-height:56px; }
+  .bubble::before { content:""; position:absolute; left:-8px; top:22px; width:14px; height:14px;
+            background:#0d1117; border-left:1px solid var(--acc); border-bottom:1px solid var(--acc);
+            transform:rotate(45deg); }
+  .bubble b { color:var(--acc); }
+  .mascot .gear { transform-box:fill-box; transform-origin:center; animation:spin 3s linear infinite; }
+  .mascot .gear.slow { animation-duration:5s; animation-direction:reverse; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes bob { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
+  @keyframes buzz { 0% { transform:translate(0,0) rotate(0deg); } 25% { transform:translate(1px,-2px) rotate(1.5deg); }
+                    50% { transform:translate(-1px,1px) rotate(-1deg); } 75% { transform:translate(1px,2px) rotate(1deg); }
+                    100% { transform:translate(0,0) rotate(0deg); } }
+  @keyframes vibrate { 0% { transform:translateX(0); } 25% { transform:translateX(-1.5px); }
+                       50% { transform:translateX(1.5px); } 75% { transform:translateX(-1px); } 100% { transform:translateX(0); } }
+  @keyframes celebrate { 0%,100% { transform:translateY(0) rotate(0deg); } 30% { transform:translateY(-14px) rotate(-3deg); }
+                         60% { transform:translateY(0) rotate(2deg); } }
+  @keyframes starpop { 0% { opacity:0; transform:scale(.4) rotate(0deg); } 50% { opacity:1; transform:scale(1.2) rotate(20deg); }
+                       100% { opacity:0; transform:scale(.8) rotate(40deg); } }
+  .mascot.idle .bot { animation:bob 2.4s ease-in-out infinite; }
+  .mascot.excited .bot { animation:buzz .35s linear infinite; }
+  .mascot.excited .gear { animation-duration:.6s; }
+  .mascot.annealing .bot { animation:vibrate .12s linear infinite; }
+  .mascot.settle .bot { animation:none; filter:drop-shadow(0 0 10px #3fb950); }
+  .mascot.celebrate .bot { animation:celebrate .7s ease-in-out 2; }
+  .mascot .star { position:absolute; font-size:18px; color:#ffd93d; opacity:0; pointer-events:none; }
+  .mascot.celebrate .star { animation:starpop 1.4s ease-out 2; }
+  .mascot .star.s1 { top:6px; left:2px; }
+  .mascot .star.s2 { top:-2px; right:6px; animation-delay:.15s; }
+  .mascot .star.s3 { top:44px; right:-2px; animation-delay:.3s; }
+  .mascot .botwrap { position:relative; display:inline-block; }
+
+  /* ---- articles ---- */
+  .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0;
+          cursor:pointer; }
+  .card:hover { border-color:var(--acc); }
   .card.sel { border-color:var(--grn); background:#12261a; }
-  .card h3 { margin:0 0 4px; font-size:16px; }
+  .card.sel:hover { border-color:var(--grn2); }
+  .card h3 { margin:6px 0 4px; font-size:16px; }
   .card h3 a { color:var(--acc); text-decoration:none; }
+  .card h3 a:hover { text-decoration:underline; }
   .card p { margin:4px 0; color:var(--dim); font-size:14px; line-height:1.5; }
   .tag { display:inline-block; font-size:11px; border-radius:4px; padding:2px 7px;
          margin-right:6px; font-weight:600; }
   .tag.sel { background:var(--grn); color:#04160a; }
   .tag.rel-high { background:#1f6feb; color:#fff; }
   .tag.rel-med { background:var(--amb); color:#241a00; }
-  .tag.rel-low { background:#6e7681; color:#fff; }
+  .tag.rel-low { background:var(--grey); color:#fff; }
   .tag.src { background:#30363d; color:var(--text); }
   .meta { font-size:12px; color:var(--dim); margin-top:6px; }
-  #status { color:var(--dim); font-size:14px; min-height:20px; }
-  .err { color:var(--red); }
+  .rank { font-size:22px; font-weight:700; color:var(--dim); margin-right:8px; }
+
+  /* ---- preview pane ---- */
+  #preview { border:1px dashed var(--acc); }
+  #preview .extract { white-space:pre-wrap; font-size:14px; line-height:1.65;
+                      color:var(--text); max-height:320px; overflow:auto;
+                      background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .toggle { font-size:13px; color:var(--dim); }
 </style>
 </head>
 <body>
@@ -70,13 +175,14 @@
   </div>
 </header>
 <main>
-  <div class="panel">
+  <!-- ============ 1 · SEARCH ============ -->
+  <div class="panel hero">
     <div class="row">
       <div class="field wide">
-        <label for="q">Query</label>
-        <input type="text" id="q" placeholder="e.g. quantum computing breakthroughs 2026" value="quantum computing breakthroughs 2026">
+        <label for="q">Ask anything — the annealer finds the best set of articles</label>
+        <input type="text" id="q" placeholder="e.g. AI search agents 2026" value="AI search agents 2026">
       </div>
-      <button id="run" onclick="runSearch()">Anneal it</button>
+      <button id="run" onclick="runSearch()">⚛ Anneal it</button>
     </div>
     <div class="row" style="margin-top:12px">
       <div class="field"><label>search_depth</label>
@@ -89,102 +195,514 @@
         <input type="text" id="exclude_domains" placeholder="e.g. reddit.com"></div>
       <div class="field"><label>time_range</label>
         <select id="time_range"><option value="any" selected>any</option><option value="day">day</option><option value="week">week</option><option value="month">month</option><option value="year">year</option></select></div>
-      <div class="field"><label>max_results</label>
-        <input type="number" id="max_results" value="8" min="3" max="15"></div>
+      <div class="field"><label>max_results (per round, Tavily cap 20)</label>
+        <input type="number" id="max_results" value="20" min="3" max="20"></div>
     </div>
     <div class="row" style="margin-top:8px">
       <div class="field"><label>frequency / wave rounds (oscillates retrieval angles)</label>
-        <input type="number" id="frequency_rounds" value="3" min="1" max="5"></div>
+        <input type="number" id="frequency_rounds" value="3" min="1" max="10"></div>
       <label class="check"><input type="checkbox" id="mantra" checked> mantra search — repeat the prompt per article, score reliability</label>
       <label class="check"><input type="checkbox" id="meta_search" checked> meta-search — merge a second parameter profile</label>
     </div>
-    <p id="status"></p>
+    <!-- Ann Nealer, the quantum annealer robot -->
+    <div class="mascot-row">
+      <div class="mascot idle" id="mascot">
+        <div class="botwrap">
+          <span class="star s1">✦</span><span class="star s2">✦</span><span class="star s3">✦</span>
+          <svg class="bot" viewBox="0 0 140 150" aria-label="Ann Nealer, the quantum annealer robot">
+            <!-- antenna -->
+            <line x1="70" y1="18" x2="70" y2="6" stroke="#58a6ff" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="70" cy="6" r="5" fill="#ffd93d"/>
+            <circle cx="70" cy="6" r="9" fill="#ffd93d" opacity="0.25"/>
+            <!-- head -->
+            <rect x="34" y="18" width="72" height="52" rx="18" fill="#58a6ff" stroke="#e6edf3" stroke-width="2"/>
+            <circle cx="56" cy="40" r="6" fill="#0d1117"/>
+            <circle cx="84" cy="40" r="6" fill="#0d1117"/>
+            <circle cx="58" cy="38" r="2" fill="#fff"/>
+            <circle cx="86" cy="38" r="2" fill="#fff"/>
+            <path d="M 58 54 Q 70 62 82 54" stroke="#0d1117" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <circle cx="46" cy="50" r="4" fill="#d29922" opacity="0.7"/>
+            <circle cx="94" cy="50" r="4" fill="#d29922" opacity="0.7"/>
+            <!-- body -->
+            <rect x="28" y="74" width="84" height="58" rx="16" fill="#58a6ff" stroke="#e6edf3" stroke-width="2"/>
+            <rect x="44" y="86" width="52" height="24" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+            <text id="mascotEnergy" x="70" y="102" text-anchor="middle" font-size="11" font-family="monospace" fill="#3fb950">E = —</text>
+            <!-- belly gear -->
+            <g class="gear" transform="translate(70 122)">
+              <polygon points="13,0 8.3,3.4 9.2,9.2 3.4,8.3 0,13 -3.4,8.3 -9.2,9.2 -8.3,3.4 -13,0 -8.3,-3.4 -9.2,-9.2 -3.4,-8.3 0,-13 3.4,-8.3 9.2,-9.2 8.3,-3.4" fill="#3fb950"/>
+              <circle r="5" fill="#0d1117"/>
+            </g>
+            <!-- shoulder gear -->
+            <g class="gear slow" transform="translate(112 84) scale(0.55)">
+              <polygon points="13,0 8.3,3.4 9.2,9.2 3.4,8.3 0,13 -3.4,8.3 -9.2,9.2 -8.3,3.4 -13,0 -8.3,-3.4 -9.2,-9.2 -3.4,-8.3 0,-13 3.4,-8.3 9.2,-9.2 8.3,-3.4" fill="#ffd93d"/>
+              <circle r="5" fill="#0d1117"/>
+            </g>
+            <!-- arms -->
+            <rect x="14" y="84" width="12" height="30" rx="6" fill="#58a6ff" stroke="#e6edf3" stroke-width="1.5"/>
+            <rect x="114" y="84" width="12" height="30" rx="6" fill="#58a6ff" stroke="#e6edf3" stroke-width="1.5"/>
+            <!-- feet -->
+            <rect x="38" y="134" width="22" height="10" rx="5" fill="#30363d" stroke="#e6edf3" stroke-width="1"/>
+            <rect x="80" y="134" width="22" height="10" rx="5" fill="#30363d" stroke="#e6edf3" stroke-width="1"/>
+          </svg>
+        </div>
+        <div class="name">Ann Nealer <span>· quantum annealer</span></div>
+      </div>
+      <div class="bubble" id="mascotBubble"><b>Ann Nealer:</b> <span id="mascotText">Hi, I’m Ann Nealer! Type a query and hit “Anneal it” — I’ll find the lowest-energy set of articles.</span></div>
+    </div>
+    <p id="status">Ready. Type a query and hit “Anneal it”.</p>
+
+    <!-- ============ 2 · ANIMATED PIPELINE STAGES ============ -->
     <div class="stages" id="stages">
-      <span class="stage" id="st1">1 · Query understanding</span>
-      <span class="stage" id="st2">2 · Telem retrieval (auto-routed)</span>
-      <span class="stage" id="st3">3 · Mantra grounding</span>
-      <span class="stage" id="st4">4 · QUBO anneal (local)</span>
+      <div class="stage" id="st1"><span class="n">1 · Query understanding</span><span class="d">Waiting…</span><div class="bar"><i></i></div></div>
+      <div class="stage" id="st2"><span class="n">2 · Frequency wave</span><span class="d">Waiting…</span><div class="bar"><i></i></div></div>
+      <div class="stage" id="st3"><span class="n">3 · Mantra loop</span><span class="d">Waiting…</span><div class="bar"><i></i></div></div>
+      <div class="stage" id="st4"><span class="n">4 · Meta-search</span><span class="d">Waiting…</span><div class="bar"><i></i></div></div>
+      <div class="stage" id="st5"><span class="n">5 · QUBO anneal</span><span class="d">Waiting…</span><div class="bar"><i></i></div></div>
     </div>
   </div>
 
-  <div class="panel" id="out" style="display:none">
-    <div class="row">
-      <div><div class="energy"><span id="energy">—</span> <small>best energy (lower = better set)</small></div>
-      <div class="kv" id="qubo"></div></div>
+  <!-- ============ RESULTS ============ -->
+  <div id="out" style="display:none">
+
+    <div class="panel">
+      <div class="row">
+        <div><div class="energy"><span id="energy">—</span> <small>best energy (more negative = better set)</small></div>
+        <div class="kv" id="qubo"></div></div>
+      </div>
+      <p class="note" style="margin:8px 0 0">⚠️ Energy is only comparable <b>within this run</b> — it scales with
+        article count (every article adds 0.45 − relevance to the objective), so a −2.96 on 111 articles
+        is not “better” than a −1.45 on 12. Compare convergence and the picks, not the raw energy.</p>
+      <p class="kv" id="pipeline" style="margin-top:10px"></p>
+      <canvas id="trace" width="900" height="140"></canvas>
+      <p class="note" id="traceNote"></p>
     </div>
-    <p class="kv" id="pipeline"></p>
-    <canvas id="trace" width="900" height="140"></canvas>
-    <div id="results"></div>
+
+    <!-- ============ 5 · WHAT COUNTS AS A GOOD SCORE ============ -->
+    <div class="panel" id="legend">
+      <h2>What counts as a good score <span class="sub">— raw scores are absolute; the labels are graded on a bell curve relative to this run</span></h2>
+      <div class="legendgrid">
+        <div>
+          <h3>Tavily score · 0–1</h3>
+          <p>Raw relevance from Tavily's own ranking. <b>0.7+ is strong.</b> Articles routed in by Telem have no
+             Tavily score (shown as n/a) — the formula uses 0.5 for those.</p>
+          <div class="sbarwrap"><div class="sbar"><div class="fill" style="width:70%"></div><div class="tick" style="left:70%"></div><div class="ticklbl" style="left:70%">strong ≥ 0.7</div></div></div>
+          <h3>Mantra grounding · 0–1</h3>
+          <p>Share of the query's words that appear in the article — the original prompt repeated against each
+             article. <b>0.7+ is strong.</b> Note: it saturates at 1.0 on broad queries (every top article
+             contains all the query words), so it discriminates best on narrow queries.</p>
+          <div class="sbarwrap"><div class="sbar"><div class="fill" style="width:70%"></div><div class="tick" style="left:70%"></div><div class="ticklbl" style="left:70%">strong ≥ 0.7</div></div></div>
+        </div>
+        <div>
+          <h3>Combined relevance · 0–1</h3>
+          <p><b>0.6 × Tavily + 0.4 × mantra grounding.</b> Reliability badge: High ≥ 0.6, Medium ≥ 0.35,
+             Low &lt; 0.35. <b>0.75+ is strong.</b></p>
+          <div class="sbarwrap"><div class="sbar"><div class="fill" style="width:75%"></div>
+            <div class="tick" style="left:35%"></div><div class="ticklbl" style="left:35%">Medium ≥ 0.35</div>
+            <div class="tick" style="left:60%"></div><div class="ticklbl" style="left:60%">High ≥ 0.6</div>
+            <div class="tick" style="left:75%"></div><div class="ticklbl" style="left:75%">strong ≥ 0.75</div></div></div>
+          <h3>Redundancy (max Jaccard) · 0–1 — lower is better</h3>
+          <p>Highest token overlap with any other article in the run. Any pair above <b>0.05</b> pays a QUBO
+             penalty of 1.2 × similarity — that's how near-duplicates get pushed out of the best set.</p>
+          <div class="sbarwrap"><div class="sbar inv"><div class="fill" style="width:5%"></div><div class="tick" style="left:5%"></div><div class="ticklbl" style="left:5%">penalty &gt; 0.05</div></div></div>
+        </div>
+      </div>
+      <h3 style="margin:14px 0 4px">Bell-curve grading — labels are relative to this run's distribution</h3>
+      <p class="note" style="margin:0 0 8px">Each label comes from the article's <b>z-score</b>: how many standard
+        deviations it sits from <i>this run's</i> mean for that metric. super frickin' amazing ≥ +1σ · amazing +0.5σ to +1σ · good 0 to +0.5σ · medium −0.5σ to 0 · medium rare −1σ to −0.5σ · really frickin' bad &lt; −1σ. For redundancy the scale is inverted (lower is better). A tier here means “ranked that way compared with the other articles in this run” — the raw score next to it is the absolute number. (Not the same as the reliability badge High / Medium / Low, which is an absolute cutoff on relevance.)</p>
+      <div id="bellLegend"></div>
+      <p class="note" style="margin:8px 0 0" id="gradingNote"></p>
+      <p class="note" style="margin:6px 0 0"><b>Convergence:</b> how many of the 100 annealing reads landed on the
+        optimum. 100/100 is ideal on small sets; lower at scale is expected — our 111-article run converged
+        31/100. <b>QUBO:</b> h<sub>i</sub> = 0.45 − relevance<sub>i</sub>, J<sub>ij</sub> = 1.2 · Jaccard(i,j)
+        when similarity &gt; 0.05, solved with 100 reads of local simulated annealing.</p>
+    </div>
+
+    <!-- ============ 3 · PREVIEW PANE ============ -->
+    <div class="panel" id="preview">
+      <h2>Article preview <span class="sub">— click any article below to read it here, or open the source in a new tab</span></h2>
+      <div id="previewBody"><p class="note">Nothing selected yet — click a card in the Top 10 or the full list.</p></div>
+    </div>
+
+    <div class="panel">
+      <h2>Top 10 — highest relevance</h2>
+      <p class="kv">Best-scoring articles by combined relevance. Green = in the annealed best set. Every title is a
+         link to the source — click a card to preview its extracted text above.</p>
+      <div id="top10"></div>
+      <h2 style="margin:22px 0 4px">All articles — full per-feature scores <span class="sub" id="allCount"></span></h2>
+      <p class="kv">Every candidate the wave retrieved, annealed as one QUBO. Each row shows Tavily, mantra,
+         combined relevance and redundancy, each with its bell-curve grade for this run.</p>
+      <label class="toggle"><input type="checkbox" id="onlySel" onchange="renderAll()"> show only the annealed best set</label>
+      <div id="all"></div>
+    </div>
   </div>
 </main>
 <script>
-function setStage(n, on) { document.getElementById('st'+n).classList.toggle('on', on); }
-function drawTrace(trace, converged, reads) {
-  const c = document.getElementById('trace'), ctx = c.getContext('2d');
-  ctx.clearRect(0,0,c.width,c.height);
-  if (!trace || !trace.length) return;
-  const min = Math.min(...trace), max = Math.max(...trace), span = (max-min)||1;
-  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
-  trace.forEach((e,i) => {
-    const x = 10 + i/(trace.length-1||1)*(c.width-20);
-    const y = c.height-12 - (e-min)/span*(c.height-24);
-    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+const $ = id => document.getElementById(id);
+const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ---------- bell curve ---------- */
+/* Normal pdf; bands at -1σ, -0.5σ, +0.5σ, +1σ. invert=true flips the
+   colours (used for redundancy, where lower is better). */
+const BANDS = [ [-3,-1,"really frickin' bad",'#f85149'], [-1,-0.5,'medium rare','#d29922'], [-0.5,0,'medium','#6e7681'],
+                [0,0.5,'good','#1a7f37'], [0.5,1,'amazing','#56d364'], [1,3,"super frickin' amazing",'#3fb950'] ];
+const pdf = z => Math.exp(-z*z/2);
+function bellSVG(z, invert, W, H, withLabels) {
+  W = W||160; H = H||46;
+  const X = zz => 4 + (zz+3)/6*(W-8);
+  const Y = zz => H-6 - (pdf(zz)/pdf(0))*(H-14);
+  let bands = '';
+  BANDS.forEach(b => {
+    const col = invert ? BANDS[5 - BANDS.indexOf(b)][3] : b[3];
+    let d = 'M ' + X(b[0]).toFixed(1) + ' ' + (H-6);
+    for (let zz=b[0]; zz<=b[1]+1e-9; zz+=0.15) d += ' L ' + X(Math.min(zz,b[1])).toFixed(1) + ' ' + Y(Math.min(zz,b[1])).toFixed(1);
+    d += ' L ' + X(b[1]).toFixed(1) + ' ' + (H-6) + ' Z';
+    bands += '<path d="'+d+'" fill="'+col+'" fill-opacity="0.20"/>';
   });
-  ctx.stroke();
-  ctx.fillStyle = '#8b949e'; ctx.font = '12px sans-serif';
-  ctx.fillText('energy trace (best → worst of ' + reads + ' reads) — best ' + min.toFixed(2) +
-    (converged ? ' · ' + converged + '/' + reads + ' reads converged to the optimum' : ''), 10, 14);
+  let curve = 'M ' + X(-3).toFixed(1) + ' ' + Y(-3).toFixed(1);
+  for (let zz=-3; zz<=3; zz+=0.1) curve += ' L ' + X(zz).toFixed(1) + ' ' + Y(zz).toFixed(1);
+  const zc = Math.max(-3, Math.min(3, z));
+  const gradeCol = gradeColor(labelForZ(z, invert));
+  const marker = '<line x1="'+X(zc).toFixed(1)+'" y1="4" x2="'+X(zc).toFixed(1)+'" y2="'+(H-6)+'" stroke="'+gradeCol+'" stroke-width="2" stroke-dasharray="3 2"/>' +
+    '<circle cx="'+X(zc).toFixed(1)+'" cy="'+Y(zc).toFixed(1)+'" r="3.5" fill="'+gradeCol+'"/>';
+  let labels = '';
+  if (withLabels) {
+    [-2,-1,0,1,2].forEach(zz => {
+      labels += '<text x="'+X(zz)+'" y="'+(H-1)+'" font-size="8" fill="#8b949e" text-anchor="middle">'+(zz>0?'+':'')+zz+'σ</text>';
+    });
+  }
+  return '<svg class="bell" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'+bands+
+    '<path d="'+curve+'" fill="none" stroke="#e6edf3" stroke-width="1.4"/>'+marker+labels+'</svg>';
 }
+function labelForZ(z, invert) {
+  if (invert) z = -z;
+  if (z >= 1) return "super frickin' amazing";
+  if (z >= 0.5) return 'amazing';
+  if (z >= 0) return 'good';
+  if (z >= -0.5) return 'medium';
+  if (z >= -1) return 'medium rare';
+  return "really frickin' bad";
+}
+function gradeColor(label) {
+  return {"super frickin' amazing":'#3fb950','amazing':'#56d364','good':'#1a7f37','medium':'#8b949e','medium rare':'#d29922',"really frickin' bad":'#f85149','n/a':'#6e7681'}[label] || '#8b949e';
+}
+const GCLS = {"super frickin' amazing":'g-top','amazing':'g-amazing','good':'g-good','medium':'g-medium','medium rare':'g-mediumrare',"really frickin' bad":'g-bottom','n/a':'g-na'};
+function gchip(label, z) {
+  const cls = GCLS[label] || 'g-na';
+  return '<span class="gchip '+cls+'">'+label+(z !== undefined && label !== 'n/a' ? ' · z ' + (z>=0?'+':'') + z.toFixed(2) : '')+'</span>';
+}
+
+/* ---------- scale bars (absolute anchors) ---------- */
+function scaleBar(value, ticks, invert, naText) {
+  if (value === null || value === undefined) return '<span class="note">'+(naText||'n/a')+'</span>';
+  const pct = Math.max(0, Math.min(100, value*100));
+  let t = '';
+  (ticks||[]).forEach(tk => {
+    t += '<div class="tick" style="left:'+(tk.v*100)+'%"></div><div class="ticklbl" style="left:'+(tk.v*100)+'%">'+tk.label+'</div>';
+  });
+  return '<div class="sbarwrap"><div class="sbar'+(invert?' inv':'')+'"><div class="fill" style="width:'+pct+'%"></div>'+t+'</div></div>';
+}
+function scoreRows(a) {
+  const g = a.grades || {};
+  const tav = a.tavily_score;
+  return '<div class="scoregrid">' +
+    '<div class="scorerow"><div class="lbl"><span>Tavily score</span><span><b>' + (tav===null||tav===undefined?'n/a':tav.toFixed(3)) + '</b> ' + (g.tavily?gchip(g.tavily.label, g.tavily.z):'') + '</span></div>' +
+      scaleBar(tav, [{v:0.7,label:'strong ≥ 0.7'}], false, 'n/a — Telem result (0.5 used in formula)') + '</div>' +
+    '<div class="scorerow"><div class="lbl"><span>Mantra grounding</span><span><b>' + a.mantra_grounding.toFixed(3) + '</b> ' + (g.mantra?gchip(g.mantra.label, g.mantra.z):'') + '</span></div>' +
+      scaleBar(a.mantra_grounding, [{v:0.7,label:'strong ≥ 0.7'}]) + '</div>' +
+    '<div class="scorerow"><div class="lbl"><span>Combined relevance = 0.6·Tavily + 0.4·grounding</span><span><b>' + a.relevance.toFixed(3) + '</b> ' + (g.relevance?gchip(g.relevance.label, g.relevance.z):'') + '</span></div>' +
+      scaleBar(a.relevance, [{v:0.35,label:'Medium ≥ 0.35'},{v:0.6,label:'High ≥ 0.6'},{v:0.75,label:'strong ≥ 0.75'}]) + '</div>' +
+    '<div class="scorerow"><div class="lbl"><span>Redundancy — max Jaccard vs other articles (lower is better)</span><span><b>' + a.redundancy_max.toFixed(3) + '</b> avg ' + a.redundancy_avg.toFixed(3) + ' ' + (g.redundancy?gchip(g.redundancy.label, g.redundancy.z):'') + '</span></div>' +
+      scaleBar(a.redundancy_max, [{v:0.05,label:'penalty > 0.05'}], true) + '</div>' +
+    '</div>';
+}
+
+/* ---------- article cards ---------- */
+let LAST = null;
+function cardHTML(a, rank) {
+  const rel = a.reliability === 'High' ? 'rel-high' : a.reliability === 'Medium' ? 'rel-med' : 'rel-low';
+  const g = a.grades || {};
+  const bell = g.relevance && g.relevance.label !== 'n/a'
+    ? bellSVG(g.relevance.z, false, 150, 42, false) : '';
+  return '<div class="card' + (a.selected ? ' sel' : '') + '" onclick="showPreview(' + a._idx + ')">' +
+    (rank !== undefined ? '<span class="rank">#' + rank + '</span>' : '') +
+    (a.selected ? '<span class="tag sel">✓ IN BEST SET</span>' : '<span class="tag src">not selected</span>') +
+    '<span class="tag ' + rel + '">reliability: ' + a.reliability + '</span>' +
+    '<span class="tag src">' + esc(a.source) + (a.provider && a.provider !== a.source ? ' · ' + esc(a.provider) : '') + '</span>' +
+    '<h3><a href="' + esc(a.url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + esc(a.title || a.url) + '</a></h3>' +
+    '<p>' + esc((a.snippet || '').slice(0, 300)) + '</p>' +
+    '<div class="bellrow"><span class="bellcap">Combined relevance vs this run’s bell curve (z = ' +
+      (g.relevance ? (g.relevance.z>=0?'+':'') + g.relevance.z.toFixed(2) + 'σ' : '—') + '):</span>' + bell +
+      (g.relevance ? gchip(g.relevance.label, g.relevance.z) : '') + '</div>' +
+    scoreRows(a) +
+    '<div class="meta">' + (a.published ? esc(a.published) + ' · ' : '') +
+    (a.round ? 'wave round ' + a.round + ' · ' : '') + 'click card to preview full extract — title link opens the source</div></div>';
+}
+function showPreview(idx) {
+  if (!LAST) return;
+  const a = LAST.articles[idx];
+  if (!a) return;
+  const g = a.grades || {};
+  const text = (a.extract && a.extract.trim()) ? a.extract : (a.snippet || 'No extracted text available for this article.');
+  $('previewBody').innerHTML =
+    '<h3 style="margin:0 0 4px"><a href="' + esc(a.url) + '" target="_blank" rel="noopener" style="color:#58a6ff">' + esc(a.title || a.url) + '</a></h3>' +
+    '<p class="kv">' + (a.selected ? '<b style="color:#3fb950">✓ IN THE ANNEALED BEST SET</b> · ' : '<b>not selected</b> · ') +
+    'reliability <b>' + a.reliability + '</b> · source: ' + esc(a.url) + '</p>' +
+    '<div class="extract">' + esc(text) + '</div>' +
+    '<div class="bellrow" style="margin-top:12px"><span class="bellcap">Where this article sits on each bell curve (this run’s distribution):</span></div>' +
+    '<div class="scoregrid">' +
+      '<div class="scorerow"><div class="lbl"><span>Tavily score</span><span><b>' + (a.tavily_score===null?'n/a':a.tavily_score.toFixed(3)) + '</b> ' + (g.tavily?gchip(g.tavily.label, g.tavily.z):'') + '</span></div>' + (g.tavily && g.tavily.label!=='n/a' ? bellSVG(g.tavily.z, false, 220, 52, true) : '<span class="note">no Tavily score — Telem result</span>') + '</div>' +
+      '<div class="scorerow"><div class="lbl"><span>Mantra grounding</span><span><b>' + a.mantra_grounding.toFixed(3) + '</b> ' + (g.mantra?gchip(g.mantra.label, g.mantra.z):'') + '</span></div>' + (g.mantra ? bellSVG(g.mantra.z, false, 220, 52, true) : '') + '</div>' +
+      '<div class="scorerow"><div class="lbl"><span>Combined relevance</span><span><b>' + a.relevance.toFixed(3) + '</b> ' + (g.relevance?gchip(g.relevance.label, g.relevance.z):'') + '</span></div>' + (g.relevance ? bellSVG(g.relevance.z, false, 220, 52, true) : '') + '</div>' +
+      '<div class="scorerow"><div class="lbl"><span>Redundancy — max Jaccard (lower is better)</span><span><b>' + a.redundancy_max.toFixed(3) + '</b> ' + (g.redundancy?gchip(g.redundancy.label, g.redundancy.z):'') + '</span></div>' + (g.redundancy ? bellSVG(g.redundancy.z, true, 220, 52, true) : '') + '</div>' +
+    '</div>' + scoreRows(a);
+  $('preview').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function renderAll() {
+  if (!LAST) return;
+  const onlySel = $('onlySel').checked;
+  const list = LAST.articles.filter(a => !onlySel || a.selected);
+  // SCALE: a 1000-article run must not dump 1000 cards into the DOM.
+  // Show the first 100 rows (top 10 live above); the count stays honest.
+  const shown = list.slice(0, 100);
+  $('allCount').textContent = '· showing ' + shown.length + ' of ' + list.length + ' (of ' + LAST.articles.length + ' total)';
+  $('all').innerHTML = shown.map(a => cardHTML(a)).join('') || '<p class="note">No articles match.</p>';
+}
+
+/* ---------- tier percentages + live counts ---------- */
+/* Theoretical normal-distribution shares (fixed math): the six z-bands
+   cover 15.9 / 15.0 / 19.1 / 19.1 / 15.0 / 15.9 % of the bell curve. */
+const TIERS = [
+  { label: "really frickin' bad", lo: -3, hi: -1, band: 'z < −1σ', theory: 15.9, color: '#f85149', cls: 'g-bottom' },
+  { label: 'medium rare', lo: -1, hi: -0.5, band: '−1σ to −0.5σ', theory: 15.0, color: '#d29922', cls: 'g-mediumrare' },
+  { label: 'medium', lo: -0.5, hi: 0, band: '−0.5σ to 0', theory: 19.1, color: '#6e7681', cls: 'g-medium' },
+  { label: 'good', lo: 0, hi: 0.5, band: '0 to +0.5σ', theory: 19.1, color: '#1a7f37', cls: 'g-good' },
+  { label: 'amazing', lo: 0.5, hi: 1, band: '+0.5σ to +1σ', theory: 15.0, color: '#56d364', cls: 'g-amazing' },
+  { label: "super frickin' amazing", lo: 1, hi: 3, band: 'z > +1σ', theory: 15.9, color: '#3fb950', cls: 'g-top' },
+];
+function legendBellSVG() {
+  const W = 600, H = 152;
+  const X = zz => 8 + (zz+3)/6*(W-16);
+  const Y = zz => 128 - (pdf(zz)/pdf(0))*64; // curve occupies y≈64..128
+  let bands = '';
+  TIERS.forEach(t => {
+    let d = 'M ' + X(t.lo).toFixed(1) + ' 128';
+    for (let zz=t.lo; zz<=t.hi+1e-9; zz+=0.15) d += ' L ' + X(Math.min(zz,t.hi)).toFixed(1) + ' ' + Y(Math.min(zz,t.hi)).toFixed(1);
+    d += ' L ' + X(t.hi).toFixed(1) + ' 128 Z';
+    bands += '<path d="'+d+'" fill="'+t.color+'" fill-opacity="0.20"/>';
+  });
+  let curve = 'M ' + X(-3).toFixed(1) + ' ' + Y(-3).toFixed(1);
+  for (let zz=-3; zz<=3; zz+=0.1) curve += ' L ' + X(zz).toFixed(1) + ' ' + Y(zz).toFixed(1);
+  // tier name + theory % printed on the graphic, staggered in two rows
+  // so neighbouring labels never collide
+  let labels = '';
+  TIERS.forEach((t, i) => {
+    const cx = X((t.lo + t.hi) / 2);
+    const y1 = (i % 2 === 0) ? 14 : 38;
+    labels += '<text x="'+cx.toFixed(1)+'" y="'+y1+'" font-size="11" font-weight="700" fill="'+t.color+'" text-anchor="middle">'+esc(t.label)+'</text>';
+    labels += '<text x="'+cx.toFixed(1)+'" y="'+(y1+12)+'" font-size="10" fill="#8b949e" text-anchor="middle">'+t.theory.toFixed(1)+'% of the curve</text>';
+  });
+  let axis = '';
+  [-2,-1,0,1,2].forEach(zz => {
+    axis += '<text x="'+X(zz)+'" y="'+(H-4)+'" font-size="9" fill="#8b949e" text-anchor="middle">'+(zz>0?'+':'')+zz+'σ</text>';
+    axis += '<line x1="'+X(zz)+'" y1="128" x2="'+X(zz)+'" y2="132" stroke="#8b949e" stroke-width="1"/>';
+  });
+  return '<svg class="bell" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="max-width:100%;height:auto">'+bands+
+    '<path d="'+curve+'" fill="none" stroke="#e6edf3" stroke-width="1.6"/>'+labels+axis+'</svg>';
+}
+function tierTableHTML(articles) {
+  const total = articles.length;
+  const counts = {};
+  TIERS.forEach(t => counts[t.label] = 0);
+  articles.forEach(a => {
+    const l = a.grades && a.grades.relevance ? a.grades.relevance.label : 'n/a';
+    if (counts[l] !== undefined) counts[l]++;
+  });
+  const rows = TIERS.slice().reverse().map(t => {
+    const n = counts[t.label];
+    const pct = total ? (100*n/total) : 0;
+    return '<tr><td><span class="gchip '+t.cls+'">'+esc(t.label)+'</span></td><td>'+t.band+'</td><td>'+t.theory.toFixed(1)+'%</td><td><b>'+n+'</b> articles · '+pct.toFixed(1)+'% of this run</td></tr>';
+  }).join('');
+  return '<table class="tiertbl"><tr><th>Tier</th><th>z-band</th><th>Theory<br>(bell curve)</th><th>This run — combined relevance</th></tr>'+rows+'</table>' +
+    '<p class="note" style="margin:8px 0 0">Theory vs reality: the percentages on the graphic are what a perfect bell curve predicts; the counts are what this run actually produced. Same six bands grade every metric — Tavily, mantra, relevance and redundancy. For redundancy the scale is inverted: the least-overlapping articles are “super frickin’ amazing”.</p>';
+}
+function renderLegendBell(articles) {
+  $('bellLegend').innerHTML = '<div style="overflow-x:auto">' + legendBellSVG() + '</div>' +
+    '<p class="note" style="margin:6px 0 10px">Each tier’s share of the bell curve is printed on the graphic, next to its label.</p>' +
+    (articles ? tierTableHTML(articles) : '<p class="note">Run a query and the live counts for this run will appear here.</p>');
+}
+
+/* ---------- energy trace (animated draw) ---------- */
+function drawTraceAnimated(trace, converged, reads) {
+  const c = $('trace'), ctx = c.getContext('2d');
+  const min = Math.min(...trace), max = Math.max(...trace), span = (max-min)||1;
+  const t0 = performance.now(), dur = 1400;
+  function frame(now) {
+    const p = Math.min(1, (now - t0) / dur);
+    const n = Math.max(2, Math.floor(trace.length * p));
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+    for (let i=0; i<n; i++) {
+      const x = 10 + i/(trace.length-1||1)*(c.width-20);
+      const y = c.height-12 - (trace[i]-min)/span*(c.height-24);
+      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#8b949e'; ctx.font = '12px sans-serif';
+    ctx.fillText('energy trace — annealing settling from worst to best read (best ' + min.toFixed(2) +
+      (converged ? ' · ' + converged + '/' + reads + ' reads converged to the optimum' : '') + ')', 10, 14);
+    if (p < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Ann Nealer ---------- */
+let runId = 0;
+function setMascot(state, text) {
+  const m = $('mascot');
+  m.className = 'mascot ' + state;
+  if (text !== undefined) $('mascotText').textContent = text;
+}
+const MASCOT_LINES = {
+  1: 'Got it! Thinking up the best angles…',
+  2: null, // set per round below
+  3: 'Grounding each article with the mantra…',
+  4: 'Meta-search — checking the opposite profile…',
+  5: 'Annealing — finding the lowest-energy set…',
+};
+const MASCOT_STATE = { 1: 'excited', 2: 'excited', 3: 'excited', 4: 'excited', 5: 'annealing' };
+
+/* ---------- animated pipeline stages ---------- */
+const ANGLES = ['',' latest developments',' in depth',' overview',' comparison',' applications',' research',' news',' analysis',' future outlook'];
+let stageTimer = null;
+function setStage(n, cls, detail, barPct) {
+  const el = $('st' + n);
+  el.classList.remove('running','done');
+  if (cls) el.classList.add(cls);
+  if (detail !== undefined) el.querySelector('.d').textContent = detail;
+  if (barPct !== undefined) el.querySelector('.bar i').style.width = barPct + '%';
+}
+function resetStages() {
+  for (let i=1;i<=5;i++) setStage(i, '', 'Waiting…', 0);
+}
+function animateStages(query, rounds, mantraOn, metaOn) {
+  const t0 = Date.now();
+  const EST = 20000; // typical run; stage 5 keeps pulsing if the run takes longer
+  const frac = [0, 0.08, 0.55, 0.75, 0.88, 1.0];
+  clearInterval(stageTimer);
+  let lastStage = 0, lastRound = 0;
+  stageTimer = setInterval(() => {
+    const el = (Date.now() - t0) / EST;
+    let cur = 1;
+    for (let i=1;i<=5;i++) if (el >= frac[i-1]) cur = i;
+    const roundNow = cur === 2 ? Math.min(rounds, Math.floor(((el - frac[1]) / (frac[2]-frac[1])) * rounds) + 1) : 0;
+    if (cur !== lastStage || roundNow !== lastRound) {
+      lastStage = cur; lastRound = roundNow;
+      let line = MASCOT_LINES[cur];
+      if (cur === 2) line = 'Waving through angles… round ' + roundNow + '/' + rounds + ': “' + query + ANGLES[(roundNow-1) % 10] + '”';
+      setMascot(MASCOT_STATE[cur], line);
+    }
+    for (let i=1;i<=5;i++) {
+      if (i < cur) setStage(i, 'done', undefined, 100);
+      else if (i === cur) {
+        let detail = '';
+        if (i === 1) detail = 'Parsing “' + query + '” — planning ' + rounds + ' wave angles…';
+        else if (i === 2) {
+          const r = Math.min(rounds, Math.floor(((el - frac[1]) / (frac[2]-frac[1])) * rounds) + 1);
+          detail = 'Wave round ' + r + '/' + rounds + ' — “' + query + ANGLES[(r-1) % 10] + '”';
+        }
+        else if (i === 3) detail = mantraOn ? 'Mantra loop — repeating the original prompt against each article…' : 'Mantra loop off for this run.';
+        else if (i === 4) detail = metaOn ? 'Meta-search — merging the opposite parameter profile…' : 'Meta-search off for this run.';
+        else detail = 'Annealing — 100 reads settling toward the lowest energy…';
+        setStage(i, 'running', detail, Math.min(95, ((el - frac[i-1]) / (frac[i]-frac[i-1])) * 100));
+      } else setStage(i, '', 'Waiting…', 0);
+    }
+    if (el > 2) { /* very long run: keep stage 5 pulsing */ }
+  }, 400);
+}
+function finishStages(d) {
+  clearInterval(stageTimer);
+  const nSel = d.articles.filter(a => a.selected).length;
+  $('mascotEnergy').textContent = 'E = ' + d.qubo.best_energy;
+  setMascot('settle', 'Settling… freezing on the optimum!');
+  const myRun = runId;
+  setTimeout(() => {
+    if (myRun === runId) setMascot('celebrate',
+      'Done! ' + nSel + ' articles in the best set — best energy ' + d.qubo.best_energy +
+      '. Click any card to preview it!');
+  }, 900);
+  setStage(1, 'done', 'Query: “' + d.query + '” — ' + d.frequency_rounds + ' wave angles planned', 100);
+  setStage(2, 'done', d.stages.rounds.map(x => 'round ' + x.round + ': “' + x.angle + '” → ' + x.results).join(' · ') +
+    ' · Telem (' + (d.stages.telem_providers.join(', ') || '—') + '): ' + d.stages.telem_results, 100);
+  setStage(3, 'done', 'Mantra grounding over ' + d.stages.candidates + ' candidates · ' + d.stages.extracted + ' extracted in full', 100);
+  setStage(4, 'done', d.meta_note || 'Meta-search off for this run', 100);
+  setStage(5, 'done', d.qubo.variables + ' variables · ' + d.qubo.couplings + ' couplings · 100 reads · best energy ' +
+    d.qubo.best_energy + ' · converged ' + d.qubo.converged + '/100', 100);
+}
+
+/* ---------- main ---------- */
+renderLegendBell(null); // theory percentages show before the first run
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
 async function runSearch() {
-  const btn = document.getElementById('run');
+  const btn = $('run');
   btn.disabled = true;
-  document.getElementById('status').textContent = 'Searching Telem + Tavily, then annealing…';
-  ['st1','st2','st3','st4'].forEach((s,i)=>setStage(i+1, true));
+  runId++;
+  resetStages();
+  setMascot('excited', 'Got it! Thinking up the best angles…');
+  const query = $('q').value.trim();
+  const rounds = +$('frequency_rounds').value;
+  const mantraOn = $('mantra').checked, metaOn = $('meta_search').checked;
+  $('status').textContent = 'Searching Telem + Tavily, then annealing…';
+  animateStages(query, rounds, mantraOn, metaOn);
   const body = {
-    query: document.getElementById('q').value,
-    search_depth: document.getElementById('search_depth').value,
-    country: document.getElementById('country').value,
-    include_domains: document.getElementById('include_domains').value,
-    exclude_domains: document.getElementById('exclude_domains').value,
-    time_range: document.getElementById('time_range').value,
-    max_results: +document.getElementById('max_results').value,
-    frequency_rounds: +document.getElementById('frequency_rounds').value,
-    mantra: document.getElementById('mantra').checked,
-    meta_search: document.getElementById('meta_search').checked,
+    query,
+    search_depth: $('search_depth').value,
+    country: $('country').value,
+    include_domains: $('include_domains').value,
+    exclude_domains: $('exclude_domains').value,
+    time_range: $('time_range').value,
+    max_results: +$('max_results').value,
+    frequency_rounds: rounds,
+    mantra: mantraOn,
+    meta_search: metaOn,
   };
   try {
     const r = await fetch('/api/search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    document.getElementById('out').style.display = 'block';
-    document.getElementById('energy').textContent = d.qubo.best_energy;
-    document.getElementById('qubo').innerHTML =
+    LAST = d;
+    d.articles.forEach((a,i) => a._idx = i);
+    finishStages(d);
+    $('out').style.display = 'block';
+    $('energy').textContent = d.qubo.best_energy;
+    $('qubo').innerHTML =
       '<b>' + d.qubo.variables + '</b> QUBO variables · <b>' + d.qubo.couplings + '</b> redundancy couplings · ' +
-      '<b>' + d.qubo.reads + '</b> annealing reads · ' + d.elapsed_s + 's end-to-end' +
-      (d.qubo.fallback ? ' · <b>fallback: top-3 by relevance</b>' : '');
-    document.getElementById('pipeline').innerHTML =
+      '<b>' + d.qubo.reads + '</b> annealing reads · converged <b>' + d.qubo.converged + '/' + d.qubo.reads + '</b> · ' +
+      d.elapsed_s + 's end-to-end' + (d.qubo.fallback ? ' · <b>fallback: top-3 by relevance</b>' : '');
+    $('pipeline').innerHTML =
       'Telem providers used: <b>' + (d.stages.telem_providers.join(', ') || '—') + '</b> (' + d.stages.telem_results + ' results) · ' +
       d.stages.rounds.map(x => 'round ' + x.round + ': “' + x.angle + '” → ' + x.results + ' results').join(' · ') +
       ' · candidates: <b>' + d.stages.candidates + '</b> · extracted: <b>' + d.stages.extracted + '</b>' +
       (d.meta_note ? ' · ' + d.meta_note : '');
-    drawTrace(d.qubo.trace, d.qubo.converged, d.qubo.reads);
-    const box = document.getElementById('results');
-    box.innerHTML = d.articles.map((a,i) => {
-      const rel = a.reliability === 'High' ? 'rel-high' : a.reliability === 'Medium' ? 'rel-med' : 'rel-low';
-      return '<div class="card' + (a.selected ? ' sel' : '') + '">' +
-        (a.selected ? '<span class="tag sel">✓ IN BEST SET</span>' : '<span class="tag src">not selected</span>') +
-        '<span class="tag ' + rel + '">reliability: ' + a.reliability + '</span>' +
-        '<span class="tag src">' + a.source + (a.provider && a.provider !== a.source ? ' · ' + a.provider : '') + '</span>' +
-        '<h3><a href="' + a.url + '" target="_blank" rel="noopener">' + (a.title || a.url) + '</a></h3>' +
-        '<p>' + (a.snippet || '').slice(0, 320) + '</p>' +
-        '<div class="meta">relevance <b>' + a.relevance + '</b> · mantra grounding <b>' + a.mantra_grounding + '</b> ' +
-        '(prompt repeated against this article) · ' + (a.published || 'no date') +
-        (a.round ? ' · wave round ' + a.round : '') + '</div></div>';
-    }).join('');
-    document.getElementById('status').textContent =
-      'Done — ' + d.articles.filter(a=>a.selected).length + ' articles in the annealed best set.';
+    drawTraceAnimated(d.qubo.trace, d.qubo.converged, d.qubo.reads);
+    $('traceNote').textContent = 'Energy trace: the 60 best of 100 reads, worst → best. A flat tail at the bottom means many reads found the same optimum — that is convergence you can see.';
+    // bell-curve legend with this run's distributions
+    const g = d.grading || {};
+    const fmt = m => g[m] ? 'mean ' + g[m].mean + ' · σ ' + g[m].stddev + ' · n=' + g[m].n : '—';
+    $('gradingNote').innerHTML = '<b>This run’s distributions:</b> Tavily ' + fmt('tavily') +
+      ' · mantra ' + fmt('mantra') + ' · relevance ' + fmt('relevance') + ' · redundancy ' + fmt('redundancy') +
+      '. ' + esc(g.note || '');
+    renderLegendBell(d.articles);
+    const top10 = d.top10 || d.articles.slice(0, 10);
+    $('top10').innerHTML = top10.map((a, i) => cardHTML(a, i + 1)).join('');
+    $('previewBody').innerHTML = '<p class="note">Click any article card to preview its extracted text here — or click its title to open the source.</p>';
+    renderAll();
+    $('status').textContent =
+      'Done — ' + d.articles.filter(a=>a.selected).length + ' articles in the annealed best set out of ' +
+      d.articles.length + ' annealed.';
   } catch (e) {
-    document.getElementById('status').innerHTML = '<span class="err">Error: ' + e.message + '</span>';
+    clearInterval(stageTimer);
+    setMascot('idle', 'Oops — that run hit a snag. Want to try again?');
+    $('status').innerHTML = '<span class="err">Error: ' + esc(e.message) + '</span>';
   } finally { btn.disabled = false; }
 }
 </script>
