@@ -305,10 +305,12 @@
              penalty of 1.2 × similarity — that's how near-duplicates get pushed out of the best set.</p>
           <div class="sbarwrap"><div class="sbar inv"><div class="fill" style="width:5%"></div><div class="tick" style="left:5%"></div><div class="ticklbl" style="left:5%">penalty &gt; 0.05</div></div></div>
           <h3>Net score — the one combined number</h3>
-          <p><b>relevance − redundancy + meta bonus + wave bonus.</b> Meta bonus +0.05 when an article is found
-             by both a wave round and the meta pass (opposite profile); wave bonus +0.01 per extra distinct wave
-             round, max +0.05. High relevance, low overlap, cross-validated. This is what the Top 10 is ranked
-             by — and the same combined signal the annealer optimizes, so the two lists now largely agree.</p>
+          <p><b>relevance − worst-twin redundancy + meta bonus + wave bonus.</b> Redundancy here is the
+             single most similar other article (max Jaccard), not the mean — one near-twin costs the
+             article, because that is what knocks a top article out of the annealer's best set. Meta bonus
+             +0.05 when an article is found by both a wave round and the meta pass (opposite profile);
+             wave bonus +0.01 per extra distinct wave round, max +0.05. High relevance, low overlap,
+             cross-validated. This is what the Top 10 is ranked by.</p>
         </div>
       </div>
       <h3 style="margin:14px 0 4px">Bell-curve grading — labels are relative to this run's distribution</h3>
@@ -423,7 +425,7 @@ function scoreRows(a) {
   const tav = a.tavily_score;
   return '<div class="scoregrid">' +
     '<div class="scorerow"><div class="lbl"><span><b>Net score</b> = relevance − redundancy + bonuses</span><span><b>' + (a.net_score !== undefined ? a.net_score.toFixed(3) : '—') + '</b> ' + (g.net ? gchip(g.net.label, g.net.z) : '') + '</span></div>' +
-      '<div class="note" style="margin:2px 0 0">relevance ' + a.relevance.toFixed(3) + ' − redundancy avg ' + a.redundancy_avg.toFixed(3) + ' + bonuses ' + ((a.meta_bonus || 0) + (a.wave_bonus || 0)).toFixed(2) + '</div></div>' +
+      '<div class="note" style="margin:2px 0 0">relevance ' + a.relevance.toFixed(3) + ' − redundancy max (worst twin) ' + a.redundancy_max.toFixed(3) + ' + bonuses ' + ((a.meta_bonus || 0) + (a.wave_bonus || 0)).toFixed(2) + '</div></div>' +
     '<div class="scorerow"><div class="lbl"><span>Tavily score</span><span><b>' + (tav===null||tav===undefined?'n/a':tav.toFixed(3)) + '</b> ' + (g.tavily?gchip(g.tavily.label, g.tavily.z):'') + '</span></div>' +
       scaleBar(tav, [{v:0.7,label:'strong ≥ 0.7'}], false, 'n/a — Telem result (0.5 used in formula)') + '</div>' +
     '<div class="scorerow"><div class="lbl"><span>Mantra grounding</span><span><b>' + a.mantra_grounding.toFixed(3) + '</b> ' + (g.mantra?gchip(g.mantra.label, g.mantra.z):'') + '</span></div>' +
