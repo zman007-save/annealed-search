@@ -10,6 +10,11 @@ https://github.com/zman007-save/annealed-search
 2. **Retrieval (Telem AI, 40% of the judging)** — one Telem call with
    auto-routing (`accuracy`) across providers (tavily, exa, seltz…), plus
    Tavily search + article extract. Grounded results, hard to build without Telem.
+   **Scaled:** 10 distinct query angles × up to 10 wave rounds (each round a
+   different angle + alternating depth / time range / topic) + 2 meta-search
+   passes + Telem — hundreds of raw results, deduped to 100–200 unique
+   candidates per query. Extract runs on the top 40 by preliminary
+   relevance; the QUBO anneals the FULL candidate set.
 3. **Mantra grounding** — the agent repeats the ORIGINAL prompt against each
    article and scores how well the article grounds to it. That is the
    reliability-of-output score (High / Medium / Low).
@@ -71,7 +76,58 @@ Get a Telem key at https://app.telem.ai (sign in → project → API keys);
 the Tavily key is in the Tavily dashboard. All participants get $100 of
 Telem credits.
 
-## Verified live test (Nov 14, ~12:00pm PT)
+The dashboard shows the scores of ALL articles (relevance, mantra
+grounding, reliability badge, selected or not) plus a Top 10 list per
+search.
+
+## Verified live test — 1,010 articles (Nov 14, ~12:53pm PT)
+
+Same query, **"AI search agents 2026"** (advanced depth, 40 wave rounds,
+max_results 50, mantra + meta-search on). The scale-up: per-call
+max_results raised from 20 to 50 (Tavily's effective per-call cap), 30
+distinct query angles, 4 meta passes, and a faster QUBO build (inverted
+index — identical mapping, identical 0.05 threshold). Observed end to end:
+
+- Telem: 50 results (auto-routed).
+- Tavily: 40 wave rounds × up to 50 results + 4 meta passes → **1,010
+  unique candidates** after dedupe, 35 extracted (top 40 by preliminary
+  relevance).
+- QUBO: **1,010 variables, 244,395 redundancy couplings, 100 annealing
+  reads, best energy −10.9985, 55 articles in the best set, 3/100 reads
+  converged to the optimum.** Total: ~43.8 s.
+- Top article: "Latest News & Trends in Search Agents | IndianWeb2.com",
+  relevance 0.909, z +1.48 — super frickin' amazing. Top 10 by relevance:
+  0.899–0.909, all High reliability, mantra grounding 1.0.
+- None of the top 10 made the best set — the redundancy penalty at this
+  scale dominates the head of the ranking (ranks 5, 6 and 8 are the same
+  Gadgets360 story in three URL variants). The best set of 55 is drawn
+  entirely from outside the top 10. Convergence is low (3/100) at this
+  size: the optimum is the best found, but most reads land elsewhere.
+- The ~200-article ceiling from the earlier scale check is broken: it was
+  a retrieval-rounds limit, not a provider limit. A first 35-round attempt
+  landed at 887 unique; 40 rounds with broader angles cleared 1,010.
+
+## Verified live test (Nov 14, ~12:20pm PT)
+
+Query: **"AI search agents 2026"** (advanced depth, 3 wave rounds, mantra + meta-search on). Observed end to end:
+
+- Telem: 50 results, providers tavily / exa / seltz (auto-routed).
+- Tavily: 3 wave rounds × 20 results + 2 meta passes → 111 unique
+  candidates after dedupe, 36 extracted (top 40 by preliminary relevance).
+- QUBO: **111 variables, 3013 redundancy couplings, 100 annealing reads,
+  best energy −2.9565, 17 articles in the best set, 31/100 reads converged
+  to the optimum.** Total: ~19.5 s.
+- Top 10 by relevance: 0.799–0.868, all High reliability, mantra grounding
+  1.0. The redundancy penalty visibly works — the top 5 are near-identical
+  "best AI search APIs" listicles and only one of them made the best set.
+- Scale check on the same query: 5 rounds → 140 candidates, 19 selected,
+  −3.2046, 11.6 s. 10 rounds (max) → 194 candidates, 8410 couplings,
+  20 selected, −4.0921, 42/100 converged, 16.0 s. Raw calls grow faster
+  than unique candidates — Tavily returns heavily overlapping results
+  across angles — but the ~200 "ceiling" was only a rounds limit: see the
+  1,010-article run above.
+
+## Earlier verified test (Nov 14, ~12:00pm PT, pre-scale-up)
 
 Query: **"quantum computing breakthroughs 2026"** (advanced depth, 3 wave
 rounds, mantra + meta-search on). Observed end to end:
