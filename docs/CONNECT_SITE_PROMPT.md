@@ -31,6 +31,19 @@ Don’t paste the keys into this chat. Muse should use the hosting service’s s
   enters in the hosting environment and verify it returns 200 before
   going live. The Tavily key is unchanged.
 
+## Backend hosting — the site cannot run the Python sampler itself
+
+- The backend is a FastAPI app (`app.py`, serves the dashboard from
+  `static/`). It needs a Python host — a static site host cannot run it.
+- `Procfile` and `render.yaml` are in the repo root for a standard
+  Python host (Render free tier is the suggested default; Railway works
+  the same way). Start command: `uvicorn app:app --host 0.0.0.0
+  --port $PORT`. Dependencies: `requirements.txt` (fastapi, uvicorn,
+  httpx, dimod, dwave-samplers, python-dotenv).
+- Server-side env vars on the host: `TELEM_API_KEY`, `TAVILY_API_KEY`,
+  `TELEM_BASE_URL=https://hack.telem.ai/api`. Enter the key values in
+  the host dashboard's secret-entry flow — never in the repo or chat.
+
 ## Repo pointers for the builder
 
 - Backend: `app.py` (FastAPI, serves the dashboard from `static/`). Run locally with `./run.sh`, then open http://localhost:8000.
