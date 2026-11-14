@@ -58,7 +58,8 @@ def _now_pt():
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from provider_contract import ProviderFailure, provider_post, bounded_payload, telem_options, extract_limit, public_profile
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -71,6 +72,11 @@ TELEM_BASE = os.environ.get("TELEM_BASE_URL", "https://router.telem.ai")
 TAVILY_BASE = "https://api.tavily.com"
 
 app = FastAPI(title="annealed-search")
+
+@app.exception_handler(ProviderFailure)
+async def provider_failure_response(request, exc):
+    return JSONResponse(status_code=exc.status, content=exc.public(), headers={"Cache-Control":"no-store"})
+
 
 STOPWORDS = set(
     "the a an of to in on for and or is are was were be by with at from as it "
@@ -311,25 +317,12 @@ async def telem_search(client: httpx.AsyncClient, query: str, num_results: int =
     Returns (articles, providers_used). Articles: title/url/snippet/source.
     """
     if not TELEM_API_KEY:
-        return [], []
-    try:
-        r = await client.post(
-            f"{TELEM_BASE}/v1/search",
-            headers={"Authorization": f"Bearer {TELEM_API_KEY}"},
-            json={
-                "user_input": {"query": query},
-                "search": {
-                    "num_results": num_results,
-                    "tier": "extended",
-                    "auto_routing": "accuracy",
-                },
-            },
-            timeout=30,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        return [], [f"telem error: {e}"]
+        raise ProviderFailure('telem','search','provider_not_configured',503)
+    data = await provider_post(
+        client, f"{TELEM_BASE}/v1/search", provider='telem', operation='search', expected='preprocessor_runs',
+        headers={"Authorization":f"Bearer {TELEM_API_KEY}"},
+        json={"user_input":{"query":query},"search":telem_options(num_results)}, timeout=30,
+    )
 
     articles, providers = [], []
     for run in data.get("preprocessor_runs", []) or []:
@@ -358,7 +351,7 @@ async def telem_search(client: httpx.AsyncClient, query: str, num_results: int =
 async def tavily_search(client: httpx.AsyncClient, query: str, params: dict):
     """Tavily search with the parameter controls."""
     if not TAVILY_API_KEY:
-        return []
+        raise ProviderFailure('tavily','search','provider_not_configured',503)
     body = {
         "api_key": TAVILY_API_KEY,
         "query": query,
@@ -375,12 +368,7 @@ async def tavily_search(client: httpx.AsyncClient, query: str, params: dict):
         body["time_range"] = params["time_range"]
     if params.get("topic"):
         body["topic"] = params["topic"]
-    try:
-        r = await client.post(f"{TAVILY_BASE}/search", json=body, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-    except Exception:
-        return []
+    data = await provider_post(client, f"{TAVILY_BASE}/search", provider='tavily', operation='search', expected='results', json=body, timeout=30)
     out = []
     for res in data.get("results", []) or []:
         out.append(
@@ -399,19 +387,12 @@ async def tavily_search(client: httpx.AsyncClient, query: str, params: dict):
 
 async def tavily_extract(client: httpx.AsyncClient, urls, query: str):
     """Extract full article text for grounding/mantra scoring."""
-    if not TAVILY_API_KEY or not urls:
+    if not urls:
         return {}
-    try:
-        r = await client.post(
-            f"{TAVILY_BASE}/extract",
-            json={"api_key": TAVILY_API_KEY, "urls": urls, "query": query,
-                  "extract_depth": "basic"},
-            timeout=45,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception:
-        return {}
+    if not TAVILY_API_KEY:
+        raise ProviderFailure('tavily','extract','provider_not_configured',503)
+    data = await provider_post(client, f"{TAVILY_BASE}/extract", provider='tavily', operation='extract', expected='results',
+       json={"api_key":TAVILY_API_KEY,"urls":urls,"query":query,"extract_depth":"basic"},timeout=45)
     out = {}
     for res in data.get("results", []) or []:
         content = as_text(res.get("raw_content") or res.get("content"))
@@ -525,6 +506,7 @@ def health():
 
 @app.post("/api/search")
 async def search(payload: dict):
+    payload = bounded_payload(payload)
     t0 = time.time()
     query = (payload.get("query") or "").strip()
     if not query:
@@ -595,8 +577,8 @@ async def search(payload: dict):
     # -- Stage 2: retrieval (Telem auto-routing + Tavily, in parallel) --
     async with make_client() as client:
         telem_task = telem_search(client, query, num_results=20)
-        tavily_tasks = [tavily_search(client, rd["angle"], rd["profile"]) for rd in rounds]
         telem_articles, providers = await telem_task
+        tavily_tasks = [tavily_search(client, rd["angle"], rd["profile"]) for rd in rounds]
         round_results = await asyncio.gather(*tavily_tasks)
         # meta-search: four extra passes with the opposite profile.
         # Kept SEPARATE from the wave rounds (not merged into
@@ -736,7 +718,7 @@ async def search(payload: dict):
             snip_overlap = (len(_qt & tokens(a["title"] + " " + (a["snippet"] or ""))) / len(_qt)) if _qt else 0.0
             a["_prelim"] = 0.6 * tav + 0.4 * snip_overlap
         ranked_prelim = sorted(candidates, key=lambda a: a["_prelim"], reverse=True)
-        extract_urls = [a["url"] for a in ranked_prelim[:40]]
+        extract_urls = [a["url"] for a in ranked_prelim[:extract_limit()]]
         chunks = [extract_urls[i:i + 20] for i in range(0, len(extract_urls), 20)]
         extract_results = await asyncio.gather(*[tavily_extract(client, c, query) for c in chunks])
         extracts = {}
@@ -784,7 +766,9 @@ async def search(payload: dict):
     candidates.sort(key=lambda a: a["relevance"], reverse=True)
     if not candidates:
         return {
-            "error": "No articles retrieved — Telem and Tavily both returned nothing for this query. Check the API keys / network and try again.",
+            "status": "no_results",
+            "message": "Both providers completed successfully but returned no usable articles.",
+            "articles": [], "top10": [],
             "query": query,
             "stages": {
                 "telem_providers": providers,
@@ -957,7 +941,11 @@ async def search(payload: dict):
         "elapsed_s": round(time.time() - t0, 1),
     }
     # Auto-record every dashboard search (JSON log + living markdown log).
-    _record_dashboard_run(payload_out)
+    payload_out["status"] = "completed"
+    payload_out["cost_profile"] = public_profile() or "original_unbounded"
+    # Public visitor queries must not enter the owner's filesystem/Drive archive by default.
+    if not public_profile() and os.environ.get("RECORD_LOCAL_RUNS", "false").lower() == "true":
+        _record_dashboard_run(payload_out)
     return payload_out
 
 
