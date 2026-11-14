@@ -106,6 +106,44 @@ index — identical mapping, identical 0.05 threshold). Observed end to end:
 - The ~200-article ceiling from the earlier scale check is broken: it was
   a retrieval-rounds limit, not a provider limit. A first 35-round attempt
   landed at 887 unique; 40 rounds with broader angles cleared 1,010.
+- **Top-10 quality problem, found by Zach:** the #1 "article" above is a
+  Blogger label page (`indianweb2.com/search/label/Search Agents`), not an
+  article. Fixed by the URL filter — see the filtered re-run below.
+
+## Verified live test — 1,010 articles, filtered re-run (Nov 14, ~1:15pm PT)
+
+Same prompt and settings as the 1,010 run above — **"AI search agents 2026"**
+(advanced depth, 40 wave rounds, max_results 50, mantra + meta-search on) —
+with one change: a URL filter that runs before scoring. It drops listing
+pages (search/label/tag/category/archive index pages), canonicalizes /amp
+URLs onto the real article URL, and collapses near-identical titles
+(title-token Jaccard ≥ 0.85) so one syndicated story can't take several
+top-10 slots. Observed end to end:
+
+- The filter removed 29 listing pages, 647 exact-URL duplicates after
+  canonicalization, and 148 same/near-identical titles → **921 unique
+  candidates** (vs 1,010 unfiltered), 33 extracted (top 40 by preliminary
+  relevance).
+- QUBO: **921 variables, 183,289 redundancy couplings, 100 annealing
+  reads, best energy −9.8295, 52 articles in the best set, 4/100 reads
+  converged to the optimum.** Total: ~34.9 s.
+- Top 10 by relevance: 0.886–0.906, all High reliability, mantra grounding
+  1.0. All ten are real articles from ten distinct domains — verified: no
+  listing pages, no /amp URLs, no duplicate titles. Top article: "Google I/O
+  2026: Google Revamps Search Experience With AI Agents, Multi-Modal
+  Queries | Technology News" (Gadgets360), 0.906.
+- Two honest iterations: the first filtered attempt dropped real articles
+  whose paths contain a /search/ directory (e.g. Google's own Search I/O
+  2026 blog post) — the rule was narrowed so "search" only counts with a
+  label segment, a search query parameter, or a bare /search path. The second
+  attempt still showed one syndicated story three times under slightly
+  different titles ("Google's New AI Agents…" vs "Google's AI Agents…",
+  title Jaccard 0.875), which the title-Jaccard rule then collapsed. Logs:
+  `runs/run-1000-filtered-v1-2026-11-14.json` (844 candidates) and
+  `runs/run-1000-filtered-v2-2026-11-14.json` (908 candidates).
+- As in the unfiltered run, none of the top 10 made the best set — the
+  52-article best set is drawn entirely from outside the top 10. Mantra
+  grounding is still 1.0 across the whole top 10.
 
 ## Verified live test (Nov 14, ~12:20pm PT)
 

@@ -112,6 +112,96 @@ bell-curve grading, Ann Nealer mascot).
   Workflows in 2026" (z +1.92, super frickin' amazing, not selected —
   redundancy vs the other listicles kept it out).
 
+## Run 5 — "AI search agents 2026" (1,010 articles, scale run)
+
+Advanced depth, 40 wave rounds, max_results 50, mantra + meta-search on.
+Nov 14, ~12:53pm PT. Scale-up: per-call max_results 20 → 50, 30 distinct
+query angles, 4 meta passes, inverted-index QUBO build (identical mapping,
+identical 0.05 threshold). Breaks the ~200-article ceiling claimed in Run 3's
+caveats — that was a retrieval-rounds limit, not a provider limit. A first
+35-round attempt landed at 887 unique; 40 rounds with broader angles
+cleared 1,010.
+
+- Telem: 50 results, providers tavily / exa / seltz (auto-routed).
+- Tavily: 40 wave rounds x up to 50 results + 4 meta passes → 1,010 unique
+  candidates after dedupe, 35 extracted (top 40 by preliminary relevance).
+- QUBO: 1,010 variables, 244,395 redundancy couplings, 100 annealing reads.
+- Best energy: −10.9985. Best set: 55 articles. Converged: 3/100 reads.
+- Total run time: ~43.8 s.
+- Reliability: 668 High / 297 Medium / 45 Low.
+
+### Top 10 by relevance (all mantra grounding 1.0, all High)
+
+| Rank | Relevance | Article | Selected |
+| --- | --- | --- | --- |
+| 1 | 0.909 | Latest News & Trends in Search Agents | IndianWeb2.com — https://www.indianweb2.com/search/label/Search%20Agents | No |
+| 2 | 0.907 | 10 Best AI Search Tools for Agents in 2026: Ranked — https://www.scrapeless.com/en/blog/best-ai-search-tools-for-agents | No |
+| 3 | 0.906 | Google I/O 2026: Google Revamps Search Experience With AI Agents, Multi-Modal Queries | Technology News — https://www.gadgets360.com/ai/news/google-io-2026-search-box-ai-agents-multi-modal-queries-gemini-11521202 | No |
+| 4 | 0.906 | AI search news June 2026: Google agents and fragmentation — https://www.bushnote.com/articles/ai-search-news-june-2026 | No |
+| 5 | 0.905 | Google I/O 2026: AI Agents in Search to Deliver Smarter Personalised Results | Technology News — https://www.gadgets360.com/how-to/news/google-io-2026-search-information-agents-rollout-features-news-11521074 | No |
+| 6 | 0.904 | Google I/O 2026: AI Agents in Search to Deliver Smarter Personalised Results | Technology News — https://www.gadgets360.com/how-to/news/google-io-2026-search-information-agents-rollout-features-11521074/amp | No |
+| 7 | 0.904 | Best Search Tools for AI Agents in 2026 - Plushcap — https://plushcap.com/content/firecrawl/blog/firecrawl-best-search-tools-for-ai-agents-in-2026 | No |
+| 8 | 0.902 | Google I/O 2026: AI Agents in Search to Deliver Smarter Personalised Results | Technology News — https://www.gadgets360.com/how-to/news/google-io-2026-search-information-agents-rollout-features-11521074 | No |
+| 9 | 0.902 | How to Use Google Search Agents: 24/7 AI Monitors | AgenticWire News — https://www.agenticwire.news/article/google-search-agents-how-to-use | No |
+| 10 | 0.899 | AI News May 21 2026: Google IO Gemini 3.5 & AI Search Agents — https://mrreviewai.com/ai-news-digest-may-21-2026 | No |
+
+Top-10 quality problem (found by Zach, fixed in Run 5b): the #1 "article"
+above is a Blogger label page (indianweb2.com/search/label/Search Agents),
+not an article, and ranks 5, 6 and 8 are the same Gadgets360 story in three
+URL variants. None of the top 10 made the best set — the 55-article best set
+is drawn entirely from outside the top 10.
+
+## Run 5b — "AI search agents 2026" (filtered re-run, 921 articles)
+
+Same prompt and settings as Run 5, ~1:15pm PT, with one change: a URL filter
+that runs before scoring. It drops listing pages (search/label/tag/category/
+archive index pages), canonicalizes /amp URLs onto the real article URL, and
+collapses near-identical titles (title-token Jaccard ≥ 0.85) so one syndicated
+story can't take several top-10 slots.
+
+- Filter removed: 29 listing pages, 647 exact-URL duplicates after
+  canonicalization, 148 same/near-identical titles → 921 unique candidates
+  (vs 1,010 unfiltered), 33 extracted.
+- QUBO: 921 variables, 183,289 redundancy couplings, 100 annealing reads.
+- Best energy: −9.8295. Best set: 52 articles. Converged: 4/100 reads.
+- Total run time: ~34.9 s.
+- Reliability: 562 High / 302 Medium / 57 Low.
+
+### Top 10 by relevance (all mantra grounding 1.0, all High)
+
+| Rank | Relevance | Article | Selected |
+| --- | --- | --- | --- |
+| 1 | 0.906 | Google I/O 2026: Google Revamps Search Experience With AI Agents, Multi-Modal Queries | Technology News — https://www.gadgets360.com/ai/news/google-io-2026-search-box-ai-agents-multi-modal-queries-gemini-11521202 | No |
+| 2 | 0.906 | AI search news June 2026: Google agents and fragmentation — https://www.bushnote.com/articles/ai-search-news-june-2026 | No |
+| 3 | 0.902 | How to Use Google Search Agents: 24/7 AI Monitors | AgenticWire News — https://www.agenticwire.news/article/google-search-agents-how-to-use | No |
+| 4 | 0.899 | AI News May 21 2026: Google IO Gemini 3.5 & AI Search Agents — https://mrreviewai.com/ai-news-digest-may-21-2026 | No |
+| 5 | 0.897 | Google's New AI Agents: Revolutionizing Search with Continuous Updates (2026) — https://promisedlanddesign.com/article/google-s-new-ai-agents-revolutionizing-search-with-continuous-updates | No |
+| 6 | 0.893 | AI search and agents news, 22 October 2026 | Aiso — https://www.getaiso.com/news/2026-10-22 | No |
+| 7 | 0.892 | Top 5 AI search trends for 2026 - Blue Ocean Media — https://blueoceanmedia.co.uk/blog/top-5-ai-search-trends-for-2026 | No |
+| 8 | 0.89 | 10 Best AI Search Tools for Agents in 2026 — https://oxylabs.io/blog/top-ai-search-tools | No |
+| 9 | 0.89 | Best AI Agent Software for Enterprise Search (2026 Guide) — https://www.gosearch.ai/blog?p=5091 | No |
+| 10 | 0.886 | Best Web Search APIs for AI Agents in 2026: Honest Comparison | Parallel — https://parallel.ai/ai/articles/the-honest-2026-comparison-web-search-apis-for-ai-agents | No |
+
+Verified clean: ten real articles from ten distinct domains — no listing
+pages, no /amp URLs, no duplicate titles. Top article: "Google I/O 2026:
+Google Revamps Search Experience With AI Agents, Multi-Modal Queries |
+Technology News" (Gadgets360), 0.906. None of the top 10 made the best set —
+same pattern as Run 5; the 52-article best set is drawn entirely from
+outside the top 10. Mantra grounding is still 1.0 across the whole top 10.
+
+### Two honest iterations
+
+- v1 (844 candidates): the first filter dropped real articles whose paths
+  contain a /search/ directory (e.g. Google's own Search I/O 2026 blog
+  post). The rule was narrowed so "search" only counts with a label segment,
+  a search query parameter, or a bare /search path. Log:
+  runs/run-1000-filtered-v1-2026-11-14.json.
+- v2 (908 candidates): still showed one syndicated story three times under
+  slightly different titles ("Google's New AI Agents…" vs "Google's AI
+  Agents…", title Jaccard 0.875; the pair's content redundancy was 0.585),
+  which the title-Jaccard rule then collapsed. Log:
+  runs/run-1000-filtered-v2-2026-11-14.json.
+
 ## How to add a new result (running-document protocol)
 
 1. Run the query in the dashboard (or via the API) and record: prompt,

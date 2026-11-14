@@ -19,6 +19,10 @@ New parameter control (innovation hook):
     each article and scores how well the article grounds to it
     (reliability of output).
   - meta-search: combines/ranks across two parameter profiles.
+  - URL filter: listing pages (search/label/tag/category/archive) are
+    dropped before scoring, /amp URLs are canonicalized, and same-domain
+    identical titles collapse to one candidate — so the top 10 are real
+    articles, not index pages or one story in three URL variants.
 
 Run:  ./run.sh   (or: .venv/bin/uvicorn app:app --port 8000)
 Then open http://localhost:8000
@@ -30,6 +34,7 @@ import re
 import statistics
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 import httpx
 from dotenv import load_dotenv
@@ -69,6 +74,74 @@ def jaccard(a: set, b: set) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+def canonical_url(url: str) -> str:
+    """Canonical form used for dedupe: strip a trailing /amp segment,
+    the amp=1 query param and utm_* tracking params, a trailing slash,
+    and lowercase the host. Real article URLs survive untouched otherwise,
+    so the canonical article URL is what gets extracted and linked."""
+    try:
+        p = urlparse((url or "").strip())
+    except Exception:
+        return url or ""
+    if not p.scheme or not p.netloc:
+        return url or ""
+    path = p.path
+    if path.endswith("/amp"):
+        path = path[:-4] or "/"
+    elif path.endswith("/amp/"):
+        path = path[:-5] or "/"
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/") or "/"
+    qs = parse_qs(p.query, keep_blank_values=True)
+    qs.pop("amp", None)
+    for k in [k for k in qs if k.lower().startswith("utm_")]:
+        qs.pop(k)
+    query = "&".join(f"{k}={v}" for k, vs in qs.items() for v in vs)
+    return urlunparse((p.scheme.lower(), p.netloc.lower(), path, "", query, ""))
+
+
+def is_listing_url(url: str) -> bool:
+    """True for pages that are listings, not articles: search / label /
+    tag / category / archive index pages. Segment-based, so a real
+    article whose slug merely contains 'search' or 'tag' is NOT dropped;
+    a 'search' directory alone doesn't drop either (real articles live
+    under /products/search/) — it only counts with a label segment, a
+    query string, or as the last segment. And a dated article permalink
+    like /archives/2026/05/10/slug survives — only date-only archive
+    paths are listings."""
+    try:
+        p = urlparse((url or "").lower())
+    except Exception:
+        return False
+    segs = [s for s in p.path.split("/") if s]
+    if not segs:
+        return False
+    # Blogger label pages and search-result pages. A bare "search"
+    # directory is NOT enough — real articles live under /products/search/
+    # (e.g. blog.google) — so "search" only counts with a label segment,
+    # a search query param (q/query/s/search/keyword), or as the last
+    # segment. A display param like ?stream=top does NOT count.
+    if "labels" in segs or "label" in segs:
+        return True
+    if "search" in segs:
+        qs = parse_qs(p.query)
+        if segs[-1] == "search":
+            return True
+        if any(k in qs for k in ("q", "query", "s", "search", "keyword", "keywords")):
+            return True
+    if "tag" in segs or "tags" in segs:
+        return True
+    if "category" in segs or "categories" in segs:
+        return True
+    if segs[0] in ("archive", "archives") and all(s.isdigit() for s in segs[1:]):
+        return True
+    return False
+
+
+def norm_title(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (title or "").lower()).strip()
 
 
 # ---------------------------------------------------------------- retrieval
@@ -381,18 +454,84 @@ async def search(payload: dict):
             round_results = list(round_results) + list(meta_results)
             meta_note = f"meta-search merged {len(meta_results)} extra passes with the opposite profile"
 
-        # merge + dedupe by URL
-        seen, candidates = {}, []
+        # merge + dedupe by canonical URL, dropping listing pages.
+        # URL filter (Nov 14): the 1,010-article run's #1 result was a
+        # Blogger label page (indianweb2.com/search/label/...) and ranks
+        # 5/6/8 were the same Gadgets360 story in three URL variants.
+        # Listing pages are dropped before scoring; /amp variants are
+        # canonicalized so they collapse onto the real article URL; and
+        # same-domain identical titles collapse to one candidate so one
+        # story can't occupy several top-10 slots under different slugs.
+        seen, seen_titles, seen_titles_x, candidates = {}, {}, {}, []
+        title_sets, title_index = [], {}
+        filtered = {"listing": 0, "dup_url": 0, "dup_title": 0, "examples": []}
+
+        def _ingest(art, round_no=None):
+            url = canonical_url(art["url"])
+            if not url:
+                return
+            if is_listing_url(url):
+                filtered["listing"] += 1
+                if len(filtered["examples"]) < 8 and url not in filtered["examples"]:
+                    filtered["examples"].append(url)
+                return
+            if url in seen:
+                filtered["dup_url"] += 1
+                return
+            title = norm_title(art.get("title", ""))
+            slug = urlparse(url).path.rstrip("/").split("/")[-1]
+            key = (urlparse(url).netloc, title)
+            if title and key in seen_titles:
+                filtered["dup_title"] += 1
+                return
+            # same story syndicated across domains: identical title AND
+            # identical URL slug on a different domain is the same copied
+            # article (e.g. the promisedlanddesign/sidhufarms pair in the
+            # first filtered run — redundancy 0.585 between them).
+            xkey = (title, slug)
+            if title and slug and xkey in seen_titles_x:
+                filtered["dup_title"] += 1
+                return
+            # near-identical titles across domains = the same syndicated
+            # story under a slightly different slug ("Google's New AI
+            # Agents..." vs "Google's AI Agents...", title Jaccard 0.875).
+            # Threshold 0.85: a title differing by one word in 8-10 tokens
+            # scores ~0.78-0.82 and survives; the syndicated copies score
+            # 0.875-1.0. Requires >= 4 title tokens so tiny titles can't
+            # false-positive. Found via an inverted index (same trick as
+            # the QUBO build) so the check stays cheap at ~1,000+ articles.
+            tset = tokens(title)
+            if len(tset) >= 4:
+                cands = set()
+                for t in tset:
+                    cands.update(title_index.get(t, ()))
+                for ci in cands:
+                    kt = title_sets[ci]
+                    inter = len(tset & kt)
+                    union = len(tset) + len(kt) - inter
+                    if union and inter / union >= 0.85:
+                        filtered["dup_title"] += 1
+                        return
+            seen[url] = True
+            if title:
+                seen_titles[key] = True
+                if slug:
+                    seen_titles_x[xkey] = True
+            if len(tset) >= 4:
+                _ti = len(title_sets)
+                title_sets.append(tset)
+                for t in tset:
+                    title_index.setdefault(t, []).append(_ti)
+            art["url"] = url
+            if round_no is not None:
+                art["round"] = round_no
+            candidates.append(art)
+
         for art in telem_articles:
-            if art["url"] not in seen:
-                seen[art["url"]] = True
-                candidates.append(art)
+            _ingest(art)
         for idx, res in enumerate(round_results):
             for art in res:
-                if art["url"] not in seen:
-                    seen[art["url"]] = True
-                    art["round"] = (idx % frequency_rounds) + 1
-                    candidates.append(art)
+                _ingest(art, round_no=(idx % frequency_rounds) + 1)
 
         # -- Stage 3: extract + mantra grounding -----------------------
         # Rank by preliminary relevance (Tavily score + snippet overlap)
@@ -562,6 +701,7 @@ async def search(payload: dict):
             ],
             "candidates": len(candidates),
             "extracted": len(extracts),
+            "filtered": filtered,
         },
         "qubo": {
             "variables": result["num_variables"],
