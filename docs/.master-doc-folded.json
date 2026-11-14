@@ -1,0 +1,16 @@
+{
+  "folded": [
+    "run-1000-2026-11-14.json",
+    "run-1000-combined-2026-11-14.json",
+    "run-1000-filtered-2026-11-14.json",
+    "run-1000-maxred-2026-11-14.json",
+    "run-2026-11-14-140857.json",
+    "run-hack-endpoint-2026-11-14.json"
+  ],
+  "skipped": {
+    "run-887-2026-11-14.json": "first 1,010 attempt; superseded by run-1000",
+    "run-1000-filtered-v1-2026-11-14.json": "filter iteration; superseded by run-1000-filtered",
+    "run-1000-filtered-v2-2026-11-14.json": "filter iteration; superseded by run-1000-filtered"
+  },
+  "next_use_case": 8
+}
