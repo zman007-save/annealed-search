@@ -92,11 +92,15 @@ Needs a `.env` file next to `app.py` (never committed — see `.gitignore`):
 ```
 TELEM_API_KEY=tlm_...
 TAVILY_API_KEY=tvly-...
+TELEM_BASE_URL=https://hack.telem.ai/api
 ```
 
-Get a Telem key at https://app.telem.ai (sign in → project → API keys);
-the Tavily key is in the Tavily dashboard. All participants get $100 of
-Telem credits.
+Get a Telem key at https://hack.telem.ai (sign in with Google →
+project → API keys). **The hackathon uses the dedicated server
+https://hack.telem.ai/api — a key issued on app.telem.ai returns 401
+there** (verified Nov 14, 2:00pm PT: the old key 401'd on the hack
+endpoint while returning 200 on router.telem.ai). The Tavily key is in
+the Tavily dashboard. All participants get $100 of Telem credits.
 
 The dashboard leads with the annealer's answer: the headline list is the
 best set itself, ranked by net score within the set. Below it, a separate

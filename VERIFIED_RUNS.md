@@ -334,3 +334,23 @@ by net, and no card falls back to a bare URL as its title.
 3. Note anything the run proves (e.g. duplicates excluded, grounding
    behaviour) and any caveat.
 4. Append as a new use-case section; do not rewrite earlier sections.
+
+## Run 6 — dedicated-server verification (Nov 14, ~2:00pm PT)
+
+The organizers announced the hackathon uses a dedicated server
+(https://hack.telem.ai, API base https://hack.telem.ai/api). The key
+issued on app.telem.ai returned **401 "Invalid API key"** on the hack
+endpoint while returning 200 (15 results, tavily/exa/seltz) on
+router.telem.ai — so a new key was issued on hack.telem.ai and the app
+was pointed at it (`TELEM_BASE_URL=https://hack.telem.ai/api` in
+`.env`; `app.py` reads the base URL from that variable, defaulting to
+the router).
+
+Small end-to-end verification through the live API (same query,
+"AI search agents 2026", advanced depth, max_results 10, 2 wave
+rounds, mantra on, meta off): **Telem returned 50 results via the hack
+endpoint (providers tavily, exa, seltz), 27 of the 40 candidates are
+Telem-sourced; QUBO 40 variables, 458 couplings, best energy −1.9729,
+37/100 reads converged, 11 in the best set, 14.5 s.** The pipeline
+works end to end on the dedicated server. Log:
+runs/run-hack-endpoint-2026-11-14.json.
