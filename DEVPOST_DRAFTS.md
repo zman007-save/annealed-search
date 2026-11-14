@@ -2,7 +2,7 @@
 
 Submission 1303383, account zacharylafer / zacharylafer@gmail.com.
 Deadline: Sat Nov 14, 2026, 4:15pm PT.
-Status: DRAFTS ONLY — nothing sent, submitted, or filled in. Prepared Nov 14, ~12:38pm PT.
+Status: form FILLED into draft 1303383 (not submitted) Nov 14, ~2:12pm PT. Pitch + About rebalanced Nov 14, ~2:25pm PT to feature all four methods (wave, mantra, meta-search, annealing). Repo is PUBLIC as of ~2:18pm PT.
 
 ## 1. Project name (51 / 60 characters, verified)
 
@@ -10,9 +10,9 @@ Status: DRAFTS ONLY — nothing sent, submitted, or filled in. Prepared Nov 14, 
 
 Alternative (44 / 60): **Annealed Search: QUBO-Powered Article Search**
 
-## 2. Elevator pitch (194 / 200 characters, verified)
+## 2. Elevator pitch (174 / 200 characters, verified)
 
-**Annealed Search turns a flood of articles into one best set: Telem AI routes the query, Tavily pulls hundreds of articles, and a QUBO solved by simulated annealing picks the least-redundant set.**
+**Annealed Search turns a flood of articles into one best set: Telem AI routes it, wave, mantra and meta-search retrieve it, then a QUBO annealer picks the least-redundant set.**
 
 ## 3. About the project (Markdown)
 
@@ -28,11 +28,17 @@ We wanted a search layer that doesn't just rank articles — it *optimizes the
 whole set*, the way a quantum annealer finds the lowest-energy state of a
 system.
 
+But the annealer is only the last step. The retrieval itself is the
+invention: three methods — frequency/wave search, mantra grounding, and
+meta-search — find the right articles in the first place, and the annealer
+then chooses the best set from what they found.
+
 ## What it does
 
 Annealed Search takes a query and returns one annealed best set of articles
 — the most relevant, least redundant collection, chosen as a set, not as a
-ranked list.
+ranked list. Four methods work as one system: frequency/wave search, mantra
+grounding, meta-search, and QUBO annealing.
 
 1. **Query understanding** — the query is expanded into 10 distinct angles
    for the frequency wave.
@@ -174,7 +180,7 @@ Python, FastAPI, Uvicorn, D-Wave Ocean SDK, dimod, dwave-samplers, Telem AI, Tav
 
 - GitHub repo: https://github.com/zman007-save/annealed-search
 
-> ⚠️ **FLAG — BLOCKER: that repo is currently PRIVATE.** Judges clicking the link from Devpost would hit a 404 / "not found" page and could not see the code. **Zach must make the repo public (GitHub → Settings → Danger Zone → Change visibility → Public) before submitting.** Do not submit with a private repo link. The `.env` file is gitignored and is not in the commit, so making the repo public does not expose any API keys.
+> ✅ Repo is PUBLIC as of Nov 14, ~2:18pm PT (verified — Public badge on the repo page). The link works for judges. The `.env` file is gitignored and is not in the commit, so no API keys are exposed.
 
 ## Still missing / blocked on Zach — do NOT attempt without him
 
@@ -182,4 +188,4 @@ Python, FastAPI, Uvicorn, D-Wave Ocean SDK, dimod, dwave-samplers, Telem AI, Tav
 2. **Thumbnail image (required).** JPG/PNG/GIF, 5 MB max, 3:2 ratio. Suggestion: a screenshot of the finished redesigned dashboard (bell-curve tiers + Ann Nealer) once the redesign lands and is verified — do not use the old dashboard.
 3. **Delete the stray wrong-account draft 1303533.** The Devpost browser task is waiting on Zach to enter the zachary294 (zachary@brainmatch.app) login himself via the secure sign-in card. No saved login exists. Only Zach can do this step.
 4. **Luma check-in — NOT approved.** Devpost's Nov 14 11:10am email says register at https://luma.com/e13wf1bd and only teams where every builder checked in as an attendee are judged. Zach's earlier "No" was ambiguous, so this is **not** treated as approved. Needs his explicit yes before anyone registers him.
-5. **Make the GitHub repo public** (see the flag above) — Zach's decision, his account.
+5. ~~Make the GitHub repo public~~ — DONE Nov 14, ~2:18pm PT (public, verified).
