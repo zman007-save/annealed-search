@@ -304,6 +304,11 @@
           <p>Highest token overlap with any other article in the run. Any pair above <b>0.05</b> pays a QUBO
              penalty of 1.2 × similarity — that's how near-duplicates get pushed out of the best set.</p>
           <div class="sbarwrap"><div class="sbar inv"><div class="fill" style="width:5%"></div><div class="tick" style="left:5%"></div><div class="ticklbl" style="left:5%">penalty &gt; 0.05</div></div></div>
+          <h3>Net score — the one combined number</h3>
+          <p><b>relevance − redundancy + meta bonus + wave bonus.</b> Meta bonus +0.05 when an article is found
+             by both a wave round and the meta pass (opposite profile); wave bonus +0.01 per extra distinct wave
+             round, max +0.05. High relevance, low overlap, cross-validated. This is what the Top 10 is ranked
+             by — and the same combined signal the annealer optimizes, so the two lists now largely agree.</p>
         </div>
       </div>
       <h3 style="margin:14px 0 4px">Bell-curve grading — labels are relative to this run's distribution</h3>
@@ -324,13 +329,19 @@
     </div>
 
     <div class="panel">
-      <h2>Top 10 — highest relevance</h2>
-      <p class="kv">Best-scoring articles by combined relevance. Green = in the annealed best set. Every title is a
-         link to the source — click a card to preview its extracted text above.</p>
+      <h2>The best set — the annealer's answer <span class="sub" id="bestCount"></span></h2>
+      <p class="kv">The articles the QUBO picked, ranked by net score within the set, highest first. This is the
+         headline result — the set that minimizes energy. Every card here is in the best set; click one to
+         preview its extracted text above.</p>
+      <div id="bestset"></div>
+      <h2 style="margin:22px 0 4px">Highest scoring individuals — top 10 by net score</h2>
+      <p class="kv">The ten highest net scores as individuals — explicitly NOT the annealer's set. A high
+         individual score doesn't guarantee a place in the best set: the annealer also penalizes overlap with
+         the other selected articles, so a top scorer with a near-twin in the set stays out.</p>
       <div id="top10"></div>
       <h2 style="margin:22px 0 4px">All articles — full per-feature scores <span class="sub" id="allCount"></span></h2>
-      <p class="kv">Every candidate the wave retrieved, annealed as one QUBO. Each row shows Tavily, mantra,
-         combined relevance and redundancy, each with its bell-curve grade for this run.</p>
+      <p class="kv">Every candidate the wave retrieved, annealed as one QUBO. Each row shows the net score on top,
+         then Tavily, mantra, combined relevance and redundancy, each with its bell-curve grade for this run.</p>
       <label class="toggle"><input type="checkbox" id="onlySel" onchange="renderAll()"> show only the annealed best set</label>
       <div id="all"></div>
     </div>
@@ -401,10 +412,18 @@ function scaleBar(value, ticks, invert, naText) {
   });
   return '<div class="sbarwrap"><div class="sbar'+(invert?' inv':'')+'"><div class="fill" style="width:'+pct+'%"></div>'+t+'</div></div>';
 }
+function xvText(a) {
+  const rounds = a.wave_round_count || 0;
+  const bonus = (a.meta_bonus || 0) + (a.wave_bonus || 0);
+  return (a.meta_found ? 'meta ✓' : 'meta —') + ' · ' + rounds + ' round' + (rounds === 1 ? '' : 's') +
+    ' · +' + bonus.toFixed(2) + ' bonus';
+}
 function scoreRows(a) {
   const g = a.grades || {};
   const tav = a.tavily_score;
   return '<div class="scoregrid">' +
+    '<div class="scorerow"><div class="lbl"><span><b>Net score</b> = relevance − redundancy + bonuses</span><span><b>' + (a.net_score !== undefined ? a.net_score.toFixed(3) : '—') + '</b> ' + (g.net ? gchip(g.net.label, g.net.z) : '') + '</span></div>' +
+      '<div class="note" style="margin:2px 0 0">relevance ' + a.relevance.toFixed(3) + ' − redundancy avg ' + a.redundancy_avg.toFixed(3) + ' + bonuses ' + ((a.meta_bonus || 0) + (a.wave_bonus || 0)).toFixed(2) + '</div></div>' +
     '<div class="scorerow"><div class="lbl"><span>Tavily score</span><span><b>' + (tav===null||tav===undefined?'n/a':tav.toFixed(3)) + '</b> ' + (g.tavily?gchip(g.tavily.label, g.tavily.z):'') + '</span></div>' +
       scaleBar(tav, [{v:0.7,label:'strong ≥ 0.7'}], false, 'n/a — Telem result (0.5 used in formula)') + '</div>' +
     '<div class="scorerow"><div class="lbl"><span>Mantra grounding</span><span><b>' + a.mantra_grounding.toFixed(3) + '</b> ' + (g.mantra?gchip(g.mantra.label, g.mantra.z):'') + '</span></div>' +
@@ -413,6 +432,8 @@ function scoreRows(a) {
       scaleBar(a.relevance, [{v:0.35,label:'Medium ≥ 0.35'},{v:0.6,label:'High ≥ 0.6'},{v:0.75,label:'strong ≥ 0.75'}]) + '</div>' +
     '<div class="scorerow"><div class="lbl"><span>Redundancy — max Jaccard vs other articles (lower is better)</span><span><b>' + a.redundancy_max.toFixed(3) + '</b> avg ' + a.redundancy_avg.toFixed(3) + ' ' + (g.redundancy?gchip(g.redundancy.label, g.redundancy.z):'') + '</span></div>' +
       scaleBar(a.redundancy_max, [{v:0.05,label:'penalty > 0.05'}], true) + '</div>' +
+    '<div class="scorerow"><div class="lbl"><span>Cross-validation — meta + wave consistency</span><span><b>' + xvText(a) + '</b></span></div>' +
+      '<div class="note" style="margin:2px 0 0">meta +0.05 if found by both a wave round and the meta pass · wave +0.01 per extra distinct round (max +0.05)</div></div>' +
     '</div>';
 }
 
@@ -421,8 +442,8 @@ let LAST = null;
 function cardHTML(a, rank) {
   const rel = a.reliability === 'High' ? 'rel-high' : a.reliability === 'Medium' ? 'rel-med' : 'rel-low';
   const g = a.grades || {};
-  const bell = g.relevance && g.relevance.label !== 'n/a'
-    ? bellSVG(g.relevance.z, false, 150, 42, false) : '';
+  const bell = g.net && g.net.label !== 'n/a'
+    ? bellSVG(g.net.z, false, 150, 42, false) : '';
   return '<div class="card' + (a.selected ? ' sel' : '') + '" onclick="showPreview(' + a._idx + ')">' +
     (rank !== undefined ? '<span class="rank">#' + rank + '</span>' : '') +
     (a.selected ? '<span class="tag sel">✓ IN BEST SET</span>' : '<span class="tag src">not selected</span>') +
@@ -430,9 +451,9 @@ function cardHTML(a, rank) {
     '<span class="tag src">' + esc(a.source) + (a.provider && a.provider !== a.source ? ' · ' + esc(a.provider) : '') + '</span>' +
     '<h3><a href="' + esc(a.url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + esc(a.title || a.url) + '</a></h3>' +
     '<p>' + esc((a.snippet || '').slice(0, 300)) + '</p>' +
-    '<div class="bellrow"><span class="bellcap">Combined relevance vs this run’s bell curve (z = ' +
-      (g.relevance ? (g.relevance.z>=0?'+':'') + g.relevance.z.toFixed(2) + 'σ' : '—') + '):</span>' + bell +
-      (g.relevance ? gchip(g.relevance.label, g.relevance.z) : '') + '</div>' +
+    '<div class="bellrow"><span class="bellcap">Net score vs this run’s bell curve (z = ' +
+      (g.net ? (g.net.z>=0?'+':'') + g.net.z.toFixed(2) + 'σ' : '—') + '):</span>' + bell +
+      (g.net ? gchip(g.net.label, g.net.z) : '') + '</div>' +
     scoreRows(a) +
     '<div class="meta">' + (a.published ? esc(a.published) + ' · ' : '') +
     (a.round ? 'wave round ' + a.round + ' · ' : '') + 'click card to preview full extract — title link opens the source</div></div>';
@@ -450,10 +471,12 @@ function showPreview(idx) {
     '<div class="extract">' + esc(text) + '</div>' +
     '<div class="bellrow" style="margin-top:12px"><span class="bellcap">Where this article sits on each bell curve (this run’s distribution):</span></div>' +
     '<div class="scoregrid">' +
+      '<div class="scorerow"><div class="lbl"><span><b>Net score</b></span><span><b>' + (a.net_score !== undefined ? a.net_score.toFixed(3) : '—') + '</b> ' + (g.net ? gchip(g.net.label, g.net.z) : '') + '</span></div>' + (g.net ? bellSVG(g.net.z, false, 220, 52, true) : '') + '</div>' +
       '<div class="scorerow"><div class="lbl"><span>Tavily score</span><span><b>' + (a.tavily_score===null?'n/a':a.tavily_score.toFixed(3)) + '</b> ' + (g.tavily?gchip(g.tavily.label, g.tavily.z):'') + '</span></div>' + (g.tavily && g.tavily.label!=='n/a' ? bellSVG(g.tavily.z, false, 220, 52, true) : '<span class="note">no Tavily score — Telem result</span>') + '</div>' +
       '<div class="scorerow"><div class="lbl"><span>Mantra grounding</span><span><b>' + a.mantra_grounding.toFixed(3) + '</b> ' + (g.mantra?gchip(g.mantra.label, g.mantra.z):'') + '</span></div>' + (g.mantra ? bellSVG(g.mantra.z, false, 220, 52, true) : '') + '</div>' +
       '<div class="scorerow"><div class="lbl"><span>Combined relevance</span><span><b>' + a.relevance.toFixed(3) + '</b> ' + (g.relevance?gchip(g.relevance.label, g.relevance.z):'') + '</span></div>' + (g.relevance ? bellSVG(g.relevance.z, false, 220, 52, true) : '') + '</div>' +
       '<div class="scorerow"><div class="lbl"><span>Redundancy — max Jaccard (lower is better)</span><span><b>' + a.redundancy_max.toFixed(3) + '</b> ' + (g.redundancy?gchip(g.redundancy.label, g.redundancy.z):'') + '</span></div>' + (g.redundancy ? bellSVG(g.redundancy.z, true, 220, 52, true) : '') + '</div>' +
+      '<div class="scorerow"><div class="lbl"><span>Cross-validation</span><span><b>' + xvText(a) + '</b></span></div><span class="note">meta +0.05 if found by both a wave round and the meta pass · wave +0.01 per extra distinct round (max +0.05)</span></div>' +
     '</div>' + scoreRows(a);
   $('preview').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
@@ -523,7 +546,7 @@ function tierTableHTML(articles) {
     return '<tr><td><span class="gchip '+t.cls+'">'+esc(t.label)+'</span></td><td>'+t.band+'</td><td>'+t.theory.toFixed(1)+'%</td><td><b>'+n+'</b> articles · '+pct.toFixed(1)+'% of this run</td></tr>';
   }).join('');
   return '<table class="tiertbl"><tr><th>Tier</th><th>z-band</th><th>Theory<br>(bell curve)</th><th>This run — combined relevance</th></tr>'+rows+'</table>' +
-    '<p class="note" style="margin:8px 0 0">Theory vs reality: the percentages on the graphic are what a perfect bell curve predicts; the counts are what this run actually produced. Same six bands grade every metric — Tavily, mantra, relevance and redundancy. For redundancy the scale is inverted: the least-overlapping articles are “super frickin’ amazing”.</p>';
+    '<p class="note" style="margin:8px 0 0">Theory vs reality: the percentages on the graphic are what a perfect bell curve predicts; the counts are what this run actually produced. Same six bands grade every metric — Tavily, mantra, relevance, redundancy and net score. For redundancy the scale is inverted: the least-overlapping articles are “super frickin’ amazing”.</p>';
 }
 function renderLegendBell(articles) {
   $('bellLegend').innerHTML = '<div style="overflow-x:auto">' + legendBellSVG() + '</div>' +
@@ -642,6 +665,51 @@ function finishStages(d) {
 /* ---------- main ---------- */
 renderLegendBell(null); // theory percentages show before the first run
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+/* ---------- render a run's results (also used to verify saved runs) ---------- */
+function renderResults(d) {
+  LAST = d;
+  d.articles.forEach((a,i) => a._idx = i);
+  finishStages(d);
+  $('out').style.display = 'block';
+  $('energy').textContent = d.qubo.best_energy;
+  $('qubo').innerHTML =
+    '<b>' + d.qubo.variables + '</b> QUBO variables · <b>' + d.qubo.couplings + '</b> redundancy couplings · ' +
+    '<b>' + d.qubo.reads + '</b> annealing reads · converged <b>' + d.qubo.converged + '/' + d.qubo.reads + '</b> · ' +
+    d.elapsed_s + 's end-to-end' + (d.qubo.fallback ? ' · <b>fallback: top-3 by relevance</b>' : '');
+  $('pipeline').innerHTML =
+    'Telem providers used: <b>' + (d.stages.telem_providers.join(', ') || '—') + '</b> (' + d.stages.telem_results + ' results) · ' +
+    d.stages.rounds.map(x => 'round ' + x.round + ': “' + x.angle + '” → ' + x.results + ' results').join(' · ') +
+    ' · candidates: <b>' + d.stages.candidates + '</b> · extracted: <b>' + d.stages.extracted + '</b>' +
+    (d.stages.meta_cross_validated !== undefined ? ' · cross-validated (wave + meta): <b>' + d.stages.meta_cross_validated + '</b> · in 2+ rounds: <b>' + d.stages.multi_round + '</b>' : '') +
+    (d.meta_note ? ' · ' + d.meta_note : '');
+  drawTraceAnimated(d.qubo.trace, d.qubo.converged, d.qubo.reads);
+  $('traceNote').textContent = 'Energy trace: the 60 best of 100 reads, worst → best. A flat tail at the bottom means many reads found the same optimum — that is convergence you can see.';
+  // bell-curve legend with this run's distributions
+  const g = d.grading || {};
+  const fmt = m => g[m] ? 'mean ' + g[m].mean + ' · σ ' + g[m].stddev + ' · n=' + g[m].n : '—';
+  $('gradingNote').innerHTML = '<b>This run’s distributions:</b> Tavily ' + fmt('tavily') +
+    ' · mantra ' + fmt('mantra') + ' · relevance ' + fmt('relevance') + ' · redundancy ' + fmt('redundancy') +
+    ' · net ' + fmt('net') +
+    '. ' + esc(g.note || '');
+  renderLegendBell(d.articles);
+  // HEADLINE: the annealer's best set, ranked by net score within the set.
+  // (net falls back to relevance for runs logged before net scores existed.)
+  const netOf = a => (a.net_score !== undefined ? a.net_score : a.relevance);
+  const bestSet = d.articles.filter(a => a.selected)
+    .sort((x, y) => netOf(y) - netOf(x));
+  $('bestset').innerHTML = bestSet.map((a, i) => cardHTML(a, i + 1)).join('') ||
+    '<p class="note">The annealer selected no articles for this run.</p>';
+  $('bestCount').textContent = '· ' + bestSet.length + ' articles · best energy ' + d.qubo.best_energy;
+  // SEPARATE: highest scoring individuals — top 10 by net score, NOT the set.
+  const top10 = d.top10 || d.articles.slice(0, 10);
+  $('top10').innerHTML = top10.map((a, i) => cardHTML(a, i + 1)).join('');
+  $('previewBody').innerHTML = '<p class="note">Click any article card to preview its extracted text here — or click its title to open the source.</p>';
+  renderAll();
+  $('status').textContent =
+    'Done — ' + bestSet.length + ' articles in the annealed best set out of ' +
+    d.articles.length + ' annealed.';
+}
+
 async function runSearch() {
   const btn = $('run');
   btn.disabled = true;
@@ -669,36 +737,7 @@ async function runSearch() {
     const r = await fetch('/api/search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    LAST = d;
-    d.articles.forEach((a,i) => a._idx = i);
-    finishStages(d);
-    $('out').style.display = 'block';
-    $('energy').textContent = d.qubo.best_energy;
-    $('qubo').innerHTML =
-      '<b>' + d.qubo.variables + '</b> QUBO variables · <b>' + d.qubo.couplings + '</b> redundancy couplings · ' +
-      '<b>' + d.qubo.reads + '</b> annealing reads · converged <b>' + d.qubo.converged + '/' + d.qubo.reads + '</b> · ' +
-      d.elapsed_s + 's end-to-end' + (d.qubo.fallback ? ' · <b>fallback: top-3 by relevance</b>' : '');
-    $('pipeline').innerHTML =
-      'Telem providers used: <b>' + (d.stages.telem_providers.join(', ') || '—') + '</b> (' + d.stages.telem_results + ' results) · ' +
-      d.stages.rounds.map(x => 'round ' + x.round + ': “' + x.angle + '” → ' + x.results + ' results').join(' · ') +
-      ' · candidates: <b>' + d.stages.candidates + '</b> · extracted: <b>' + d.stages.extracted + '</b>' +
-      (d.meta_note ? ' · ' + d.meta_note : '');
-    drawTraceAnimated(d.qubo.trace, d.qubo.converged, d.qubo.reads);
-    $('traceNote').textContent = 'Energy trace: the 60 best of 100 reads, worst → best. A flat tail at the bottom means many reads found the same optimum — that is convergence you can see.';
-    // bell-curve legend with this run's distributions
-    const g = d.grading || {};
-    const fmt = m => g[m] ? 'mean ' + g[m].mean + ' · σ ' + g[m].stddev + ' · n=' + g[m].n : '—';
-    $('gradingNote').innerHTML = '<b>This run’s distributions:</b> Tavily ' + fmt('tavily') +
-      ' · mantra ' + fmt('mantra') + ' · relevance ' + fmt('relevance') + ' · redundancy ' + fmt('redundancy') +
-      '. ' + esc(g.note || '');
-    renderLegendBell(d.articles);
-    const top10 = d.top10 || d.articles.slice(0, 10);
-    $('top10').innerHTML = top10.map((a, i) => cardHTML(a, i + 1)).join('');
-    $('previewBody').innerHTML = '<p class="note">Click any article card to preview its extracted text here — or click its title to open the source.</p>';
-    renderAll();
-    $('status').textContent =
-      'Done — ' + d.articles.filter(a=>a.selected).length + ' articles in the annealed best set out of ' +
-      d.articles.length + ' annealed.';
+    renderResults(d);
   } catch (e) {
     clearInterval(stageTimer);
     setMascot('idle', 'Oops — that run hit a snag. Want to try again?');
