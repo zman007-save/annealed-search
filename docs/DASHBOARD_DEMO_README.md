@@ -117,11 +117,15 @@ it as current, not as planned):
   relevance: High ≥ 0.6, Medium ≥ 0.35, Low below. They are not a
   separate signal — just a label on the relevance number.
 - **Net score** (one combined number per article, and what the top 10
-  is ranked by): net = relevance − redundancy (mean Jaccard similarity
-  to the other articles) + meta bonus (+0.05 if the article was found by
-  both a wave round and the meta pass — cross-validation under two
-  different parameter profiles) + wave bonus (+0.01 per extra distinct
-  wave round, max +0.05). Every component stays visible per article.
+  is ranked by): net = relevance − redundancy (worst-twin Jaccard
+  similarity — the single most similar other article) + meta bonus
+  (+0.05 if the article was found by both a wave round and the meta
+  pass — cross-validation under two different parameter profiles) +
+  wave bonus (+0.01 per extra distinct wave round, max +0.05). The
+  mean was tried first and failed: it barely varies among top articles
+  (0.052–0.064), so it let near-twins top the ranking while the
+  annealer threw them out of the set. Every component stays visible
+  per article.
 - **The QUBO, in one sentence:** one binary variable per article
   (1 = in the best set); the linear term `0.45 − relevance` rewards
   picking relevant articles, the quadratic term penalizes picking
@@ -136,14 +140,15 @@ it as current, not as planned):
 - Mantra grounding saturates at 1.0 across the whole top 10 on broad
   queries, so it does not discriminate among the best articles there.
 - Convergence drops at large scale: 3/100 reads converged at 1,010
-  variables, 4/100 at 921, 10/100 at 926. The best set is the best
-  found, not a proven optimum.
-- The top 10 and the best set are different things and they do not
-  overlap in the big runs: in the latest combined run, **0 of the top
-  10 by net score are in the 53-article best set**. The top 10 is the
-  highest net-scoring articles; the best set is a joint optimization
-  that trades relevance against redundancy across the whole set. Do not
-  write copy claiming the top 10 *are* the best set.
+  variables, 4/100 at 921, 10/100 at 926, 6/100 at 902. The best set is
+  the best found, not a proven optimum.
+- The top 10 and the best set are different things and they only partly
+  overlap in the big runs: in the latest worst-twin run, **2 of the top
+  10 by net score are in the 50-article best set** (up from 0/10 when
+  the net score used the mean redundancy). The top 10 is the highest
+  net-scoring articles; the best set is a joint optimization that trades
+  relevance against redundancy across the whole set. Do not write copy
+  claiming the top 10 *are* the best set.
 
 ## 5. Sponsor technology
 
