@@ -1,0 +1,17 @@
+START usage=268 target=750 max_runs=30
+RUN 1 'quantum error correction 2026' rounds=40 cands=629 energy=-6.7898 conv=54/100 selected=29 took=33.5s usage=268
+RUN 2 'protein folding AI drug discovery 2026' rounds=40 cands=569 energy=-4.3234 conv=18/100 selected=24 took=36.4s usage=268
+START usage=268 est_start=372 est_stop=740 max_runs=20
+RUN 1 'fusion energy startups 2026' rounds=40 cands=542 energy=-4.6666 conv=38/100 selected=28 took=24.6s usage=268 est_run=52 projected=424
+RUN 2 'CRISPR gene therapy clinical trials 2026' rounds=40 cands=449 energy=-2.3027 conv=40/100 selected=14 took=26.6s usage=268 est_run=54 projected=478
+RUN 3 'solid-state batteries electric vehicles 2026' rounds=40 cands=490 energy=-2.5295 conv=35/100 selected=13 took=32.0s usage=268 est_run=52 projected=530
+RUN 4 'AI agents enterprise adoption 2026' rounds=40 cands=641 energy=-5.783 conv=11/100 selected=26 took=41.3s usage=268 est_run=53 projected=584
+RUN 5 'carbon removal climate tech 2026' rounds=40 cands=580 energy=-4.3349 conv=34/100 selected=24 took=31.8s usage=268 est_run=54 projected=637
+usage check failed after run 6: HTTP Error 429: Too Many Requests
+RUN 6 'reusable rockets space launch 2026' rounds=40 cands=564 energy=-3.3311 conv=21/100 selected=18 took=29.3s usage=268 est_run=54 projected=690
+usage check failed after run 7: HTTP Error 429: Too Many Requests
+RUN 7 'semiconductor chiplet design 2026' rounds=15 cands=261 energy=-2.3743 conv=20/100 selected=13 took=22.5s usage=268 est_run=28 projected=719
+usage check failed after run 8: HTTP Error 429: Too Many Requests
+RUN 8 'longevity aging research 2026' rounds=15 cands=271 energy=-6.9975 conv=35/100 selected=33 took=27.7s usage=268 est_run=26 projected=745
+STOP estimated spend reached projected=745
+DONE runs=8 usage=268 projected=745 elapsed=4.0min
