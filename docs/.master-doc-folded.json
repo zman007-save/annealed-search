@@ -5,6 +5,17 @@
     "run-1000-filtered-2026-11-14.json",
     "run-1000-maxred-2026-11-14.json",
     "run-2026-11-14-140857.json",
+    "run-2026-11-14-143943.json",
+    "run-2026-11-14-144020.json",
+    "run-2026-11-14-144047.json",
+    "run-2026-11-14-144127.json",
+    "run-2026-11-14-144154.json",
+    "run-2026-11-14-144227.json",
+    "run-2026-11-14-144309.json",
+    "run-2026-11-14-144342.json",
+    "run-2026-11-14-144412.json",
+    "run-2026-11-14-144435.json",
+    "run-2026-11-14-144503.json",
     "run-hack-endpoint-2026-11-14.json"
   ],
   "skipped": {
@@ -12,5 +23,5 @@
     "run-1000-filtered-v1-2026-11-14.json": "filter iteration; superseded by run-1000-filtered",
     "run-1000-filtered-v2-2026-11-14.json": "filter iteration; superseded by run-1000-filtered"
   },
-  "next_use_case": 8
+  "next_use_case": 19
 }
