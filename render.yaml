@@ -1,0 +1,18 @@
+# Render blueprint for the annealed-search backend (FastAPI + static dashboard).
+# No secrets in this file: the three env vars are declared with sync: false,
+# so their values are entered in the Render dashboard (secure secret entry),
+# never committed. Apply with "New + -> Blueprint" or `render blueprint`.
+services:
+  - type: web
+    name: annealed-search
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: TELEM_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: TELEM_BASE_URL
+        value: https://hack.telem.ai/api
