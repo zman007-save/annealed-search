@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>annealed-search — SearchHack</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3;
+         --dim:#8b949e; --acc:#58a6ff; --grn:#3fb950; --amb:#d29922; --red:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  header { padding:22px 24px 8px; }
+  header h1 { margin:0; font-size:26px; }
+  header h1 span { color:var(--acc); }
+  header p { color:var(--dim); margin:6px 0 0; }
+  .badge { display:inline-block; font-size:12px; border:1px solid var(--line);
+           border-radius:20px; padding:3px 10px; color:var(--dim); margin:2px 4px 2px 0; }
+  .badge b { color:var(--text); }
+  main { max-width:980px; margin:0 auto; padding:8px 24px 60px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:16px; margin:14px 0; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+  input[type=text], input[type=number], select {
+    background:#0d1117; color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:8px 10px; font-size:14px; width:100%; }
+  .field { flex:1 1 140px; }
+  .field.wide { flex:3 1 320px; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:6px;
+           padding:10px 22px; font-size:15px; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .check { display:flex; align-items:center; gap:6px; font-size:14px; padding:8px 0; }
+  .stages { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
+  .stage { border:1px solid var(--line); border-radius:20px; padding:6px 12px;
+           font-size:13px; color:var(--dim); }
+  .stage.on { border-color:var(--grn); color:var(--grn); }
+  .stage b { color:var(--text); }
+  .energy { font-size:34px; font-weight:700; }
+  .energy small { font-size:14px; color:var(--dim); font-weight:400; }
+  .kv { color:var(--dim); font-size:13px; line-height:1.7; }
+  .kv b { color:var(--text); }
+  canvas { width:100%; height:140px; background:#0d1117; border:1px solid var(--line);
+           border-radius:6px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0; }
+  .card.sel { border-color:var(--grn); background:#12261a; }
+  .card h3 { margin:0 0 4px; font-size:16px; }
+  .card h3 a { color:var(--acc); text-decoration:none; }
+  .card p { margin:4px 0; color:var(--dim); font-size:14px; line-height:1.5; }
+  .tag { display:inline-block; font-size:11px; border-radius:4px; padding:2px 7px;
+         margin-right:6px; font-weight:600; }
+  .tag.sel { background:var(--grn); color:#04160a; }
+  .tag.rel-high { background:#1f6feb; color:#fff; }
+  .tag.rel-med { background:var(--amb); color:#241a00; }
+  .tag.rel-low { background:#6e7681; color:#fff; }
+  .tag.src { background:#30363d; color:var(--text); }
+  .meta { font-size:12px; color:var(--dim); margin-top:6px; }
+  #status { color:var(--dim); font-size:14px; min-height:20px; }
+  .err { color:var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>annealed<span>-search</span></h1>
+  <p>Articles in, simulated quantum annealing out. QUBO solved locally —
+     simulated today, QPU-ready. Built on Telem AI + Tavily for SearchHack.</p>
+  <div>
+    <span class="badge">Judging: <b>40% Telem AI</b> · 20% Venture · 20% Innovation · 20% Execution</span>
+    <span class="badge">Annealer: <b>local simulated annealing</b> (D-Wave Ocean SDK) — QPU minute untouched</span>
+  </div>
+</header>
+<main>
+  <div class="panel">
+    <div class="row">
+      <div class="field wide">
+        <label for="q">Query</label>
+        <input type="text" id="q" placeholder="e.g. quantum computing breakthroughs 2026" value="quantum computing breakthroughs 2026">
+      </div>
+      <button id="run" onclick="runSearch()">Anneal it</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>search_depth</label>
+        <select id="search_depth"><option value="advanced" selected>advanced</option><option value="basic">basic</option></select></div>
+      <div class="field"><label>country (e.g. us)</label>
+        <input type="text" id="country" placeholder="optional"></div>
+      <div class="field"><label>include_domains (comma list)</label>
+        <input type="text" id="include_domains" placeholder="e.g. nature.com"></div>
+      <div class="field"><label>exclude_domains (comma list)</label>
+        <input type="text" id="exclude_domains" placeholder="e.g. reddit.com"></div>
+      <div class="field"><label>time_range</label>
+        <select id="time_range"><option value="any" selected>any</option><option value="day">day</option><option value="week">week</option><option value="month">month</option><option value="year">year</option></select></div>
+      <div class="field"><label>max_results</label>
+        <input type="number" id="max_results" value="8" min="3" max="15"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>frequency / wave rounds (oscillates retrieval angles)</label>
+        <input type="number" id="frequency_rounds" value="3" min="1" max="5"></div>
+      <label class="check"><input type="checkbox" id="mantra" checked> mantra search — repeat the prompt per article, score reliability</label>
+      <label class="check"><input type="checkbox" id="meta_search" checked> meta-search — merge a second parameter profile</label>
+    </div>
+    <p id="status"></p>
+    <div class="stages" id="stages">
+      <span class="stage" id="st1">1 · Query understanding</span>
+      <span class="stage" id="st2">2 · Telem retrieval (auto-routed)</span>
+      <span class="stage" id="st3">3 · Mantra grounding</span>
+      <span class="stage" id="st4">4 · QUBO anneal (local)</span>
+    </div>
+  </div>
+
+  <div class="panel" id="out" style="display:none">
+    <div class="row">
+      <div><div class="energy"><span id="energy">—</span> <small>best energy (lower = better set)</small></div>
+      <div class="kv" id="qubo"></div></div>
+    </div>
+    <p class="kv" id="pipeline"></p>
+    <canvas id="trace" width="900" height="140"></canvas>
+    <div id="results"></div>
+  </div>
+</main>
+<script>
+function setStage(n, on) { document.getElementById('st'+n).classList.toggle('on', on); }
+function drawTrace(trace, converged, reads) {
+  const c = document.getElementById('trace'), ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  if (!trace || !trace.length) return;
+  const min = Math.min(...trace), max = Math.max(...trace), span = (max-min)||1;
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+  trace.forEach((e,i) => {
+    const x = 10 + i/(trace.length-1||1)*(c.width-20);
+    const y = c.height-12 - (e-min)/span*(c.height-24);
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+  ctx.fillStyle = '#8b949e'; ctx.font = '12px sans-serif';
+  ctx.fillText('energy trace (best → worst of ' + reads + ' reads) — best ' + min.toFixed(2) +
+    (converged ? ' · ' + converged + '/' + reads + ' reads converged to the optimum' : ''), 10, 14);
+}
+async function runSearch() {
+  const btn = document.getElementById('run');
+  btn.disabled = true;
+  document.getElementById('status').textContent = 'Searching Telem + Tavily, then annealing…';
+  ['st1','st2','st3','st4'].forEach((s,i)=>setStage(i+1, true));
+  const body = {
+    query: document.getElementById('q').value,
+    search_depth: document.getElementById('search_depth').value,
+    country: document.getElementById('country').value,
+    include_domains: document.getElementById('include_domains').value,
+    exclude_domains: document.getElementById('exclude_domains').value,
+    time_range: document.getElementById('time_range').value,
+    max_results: +document.getElementById('max_results').value,
+    frequency_rounds: +document.getElementById('frequency_rounds').value,
+    mantra: document.getElementById('mantra').checked,
+    meta_search: document.getElementById('meta_search').checked,
+  };
+  try {
+    const r = await fetch('/api/search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    document.getElementById('out').style.display = 'block';
+    document.getElementById('energy').textContent = d.qubo.best_energy;
+    document.getElementById('qubo').innerHTML =
+      '<b>' + d.qubo.variables + '</b> QUBO variables · <b>' + d.qubo.couplings + '</b> redundancy couplings · ' +
+      '<b>' + d.qubo.reads + '</b> annealing reads · ' + d.elapsed_s + 's end-to-end' +
+      (d.qubo.fallback ? ' · <b>fallback: top-3 by relevance</b>' : '');
+    document.getElementById('pipeline').innerHTML =
+      'Telem providers used: <b>' + (d.stages.telem_providers.join(', ') || '—') + '</b> (' + d.stages.telem_results + ' results) · ' +
+      d.stages.rounds.map(x => 'round ' + x.round + ': “' + x.angle + '” → ' + x.results + ' results').join(' · ') +
+      ' · candidates: <b>' + d.stages.candidates + '</b> · extracted: <b>' + d.stages.extracted + '</b>' +
+      (d.meta_note ? ' · ' + d.meta_note : '');
+    drawTrace(d.qubo.trace, d.qubo.converged, d.qubo.reads);
+    const box = document.getElementById('results');
+    box.innerHTML = d.articles.map((a,i) => {
+      const rel = a.reliability === 'High' ? 'rel-high' : a.reliability === 'Medium' ? 'rel-med' : 'rel-low';
+      return '<div class="card' + (a.selected ? ' sel' : '') + '">' +
+        (a.selected ? '<span class="tag sel">✓ IN BEST SET</span>' : '<span class="tag src">not selected</span>') +
+        '<span class="tag ' + rel + '">reliability: ' + a.reliability + '</span>' +
+        '<span class="tag src">' + a.source + (a.provider && a.provider !== a.source ? ' · ' + a.provider : '') + '</span>' +
+        '<h3><a href="' + a.url + '" target="_blank" rel="noopener">' + (a.title || a.url) + '</a></h3>' +
+        '<p>' + (a.snippet || '').slice(0, 320) + '</p>' +
+        '<div class="meta">relevance <b>' + a.relevance + '</b> · mantra grounding <b>' + a.mantra_grounding + '</b> ' +
+        '(prompt repeated against this article) · ' + (a.published || 'no date') +
+        (a.round ? ' · wave round ' + a.round : '') + '</div></div>';
+    }).join('');
+    document.getElementById('status').textContent =
+      'Done — ' + d.articles.filter(a=>a.selected).length + ' articles in the annealed best set.';
+  } catch (e) {
+    document.getElementById('status').innerHTML = '<span class="err">Error: ' + e.message + '</span>';
+  } finally { btn.disabled = false; }
+}
+</script>
+</body>
+</html>
