@@ -35,13 +35,25 @@ Run:  ./run.sh   (or: .venv/bin/uvicorn app:app --port 8000)
 Then open http://localhost:8000
 """
 import asyncio
+import json
 import math
 import os
 import re
 import statistics
 import time
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse, urlunparse
+
+try:
+    from zoneinfo import ZoneInfo
+    _PT = ZoneInfo("America/Los_Angeles")
+except Exception:  # pragma: no cover - tzdata missing
+    _PT = None
+
+
+def _now_pt():
+    return datetime.now(_PT) if _PT else datetime.now()
 
 import httpx
 from dotenv import load_dotenv
@@ -151,6 +163,145 @@ def is_listing_url(url: str) -> bool:
 
 def norm_title(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (title or "").lower()).strip()
+
+
+# ------------------------------------------------------- run recording
+# Every dashboard search is auto-recorded: the full result JSON goes to
+# runs/run-<timestamp>.json and a human-readable section is appended to
+# runs/dashboard-searches.md (prompt, settings, per-article scores with
+# hyperlinks, best set as a set). Recording never changes the search
+# itself, and a recording failure never breaks the response.
+RUNS_DIR = Path(__file__).parent / "runs"
+DASHBOARD_LOG = RUNS_DIR / "dashboard-searches.md"
+
+
+def _md_text(text):
+    """Link text safe for a markdown table cell + link."""
+    t = (str(text or "").strip() or "—").replace("|", "\\|")
+    t = t.replace("[", "(").replace("]", ")").replace("\n", " ")
+    return t
+
+
+def _num(x, nd=3):
+    if x is None:
+        return "—"
+    if isinstance(x, float):
+        return f"{x:.{nd}f}"
+    return str(x)
+
+
+def _record_dashboard_run(payload: dict) -> None:
+    try:
+        RUNS_DIR.mkdir(exist_ok=True)
+        stamp = _now_pt().strftime("%Y-%m-%d-%H%M%S")
+        json_path = RUNS_DIR / f"run-{stamp}.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+        q = payload.get("query", "")
+        params = payload.get("params", {}) or {}
+        stages = payload.get("stages", {}) or {}
+        qubo = payload.get("qubo", {}) or {}
+        articles = payload.get("articles", []) or []
+        filt = stages.get("filtered", {}) or {}
+        selected = [a for a in articles if a.get("selected")]
+        by_net = sorted(articles, key=lambda a: -(a.get("net_score") or 0))
+        top10 = payload.get("top10", []) or []
+        overlap = sum(1 for a in top10 if a.get("selected"))
+        sel_nets = [a.get("net_score") for a in selected if a.get("net_score") is not None]
+        all_nets = [a.get("net_score") for a in articles if a.get("net_score") is not None]
+        set_mean = round(statistics.fmean(sel_nets), 3) if sel_nets else None
+        run_mean = round(statistics.fmean(all_nets), 3) if all_nets else None
+        when = _now_pt().strftime("%Y-%m-%d %H:%M:%S") + " PT"
+        depth = params.get("search_depth", "advanced")
+        tr = params.get("time_range", "any")
+        country = params.get("country") or "none"
+        inc = ", ".join(params.get("include_domains") or []) or "none"
+        exc = ", ".join(params.get("exclude_domains") or []) or "none"
+
+        lines = []
+        if not DASHBOARD_LOG.exists():
+            lines.append("# Dashboard searches — living log\n")
+            lines.append(
+                "Every search run from the dashboard is recorded here "
+                "automatically: the prompt, the settings, the scores "
+                "individually (per article) and together (the annealed "
+                "best set), with a hyperlink on every article title. "
+                "The full JSON for each run is in "
+                "runs/run-<YYYY-MM-DD-HHMMSS>.json.\n")
+        lines.append(f'## {when} — "{q}"\n')
+        lines.append(
+            f"Settings: {depth} depth, {payload.get('frequency_rounds')} wave "
+            f"rounds, max_results {params.get('max_results')}, mantra "
+            f"{'on' if payload.get('mantra') else 'off'}, meta-search "
+            f"{'on' if payload.get('meta_search') else 'off'}. Time range: "
+            f"{tr}. Country: {country}. Include domains: {inc}. Exclude "
+            f"domains: {exc}.\n")
+        lines.append(
+            f"Telem: {stages.get('telem_results')} results "
+            f"({', '.join(stages.get('telem_providers') or []) or 'none'}). "
+            f"Candidates: {stages.get('candidates')} "
+            f"({stages.get('extracted')} extracted). Filtered out: "
+            f"{filt.get('listing', 0)} listing pages, "
+            f"{filt.get('dup_url', 0)} duplicate URLs, "
+            f"{filt.get('dup_title', 0)} duplicate titles, "
+            f"{filt.get('empty_title', 0)} empty titles. Meta "
+            f"cross-validated: {stages.get('meta_cross_validated', 0)}. "
+            f"In 2+ wave rounds: {stages.get('multi_round', 0)}.\n")
+        lines.append(
+            f"QUBO: {qubo.get('variables')} variables, "
+            f"{qubo.get('couplings')} couplings, {qubo.get('reads')} reads, "
+            f"best energy {qubo.get('best_energy')}, "
+            f"{qubo.get('converged')}/{qubo.get('reads')} converged, "
+            f"{len(selected)} in the best set, "
+            f"{payload.get('elapsed_s')}s."
+            + (" (annealer picked none — fell back to top 3)"
+               if qubo.get("fallback") else "")
+            + "\n")
+        lines.append(
+            f"### Scores — individually ({len(articles)} articles, by net score)\n")
+        lines.append(
+            "| # | Article | Source | Tavily | Mantra | Relevance | Red. max | "
+            "Meta+ | Wave+ | Net | Selected? |")
+        lines.append(
+            "|---|---------|--------|--------|--------|-----------|----------|-------|-------|-----|-----------|")
+        for i, a in enumerate(by_net, 1):
+            title = _md_text(a.get("title") or a.get("url"))
+            url = (a.get("url") or "").strip()
+            link = f"[{title}](<{url}>)" if url else title
+            lines.append(
+                f"| {i} | {link} | {a.get('source') or '—'} | "
+                f"{_num(a.get('tavily_score'))} | "
+                f"{_num(a.get('mantra_grounding'))} | "
+                f"{_num(a.get('relevance'))} | "
+                f"{_num(a.get('redundancy_max'))} | "
+                f"{_num(a.get('meta_bonus'), 2)} | "
+                f"{_num(a.get('wave_bonus'), 2)} | "
+                f"{_num(a.get('net_score'))} | "
+                f"{'Yes' if a.get('selected') else 'No'} |")
+        lines.append(
+            f"\n### Together — the annealed best set "
+            f"({len(selected)} articles)\n")
+        lines.append(
+            f"Best energy {qubo.get('best_energy')}; "
+            f"{qubo.get('converged')}/{qubo.get('reads')} reads converged; "
+            f"{payload.get('elapsed_s')}s. Mean net of the set "
+            f"{_num(set_mean)} vs run mean {_num(run_mean)}. Overlap with "
+            f"the top 10 by net: {overlap}/10.\n")
+        lines.append("| # | Article | Net |")
+        lines.append("|---|---------|-----|")
+        for i, a in enumerate(
+                sorted(selected, key=lambda x: -(x.get("net_score") or 0)), 1):
+            title = _md_text(a.get("title") or a.get("url"))
+            url = (a.get("url") or "").strip()
+            link = f"[{title}](<{url}>)" if url else title
+            lines.append(f"| {i} | {link} | {_num(a.get('net_score'))} |")
+        lines.append("")
+        with open(DASHBOARD_LOG, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except Exception:
+        # Recording must never break the search response.
+        pass
 
 
 # ---------------------------------------------------------------- retrieval
@@ -758,7 +909,7 @@ async def search(payload: dict):
     # and the best set now largely agree.
     top10 = sorted(ranked, key=lambda a: -a["net_score"])[:10]
 
-    return {
+    payload_out = {
         "query": query,
         "params": params,
         "frequency_rounds": frequency_rounds,
@@ -805,6 +956,9 @@ async def search(payload: dict):
         "grading": grading,
         "elapsed_s": round(time.time() - t0, 1),
     }
+    # Auto-record every dashboard search (JSON log + living markdown log).
+    _record_dashboard_run(payload_out)
+    return payload_out
 
 
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
