@@ -53,7 +53,9 @@ load_dotenv(Path(__file__).parent / ".env")
 
 TELEM_API_KEY = os.environ.get("TELEM_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
-TELEM_BASE = "https://router.telem.ai"
+# SearchHack dedicated server: TELEM_BASE_URL=https://hack.telem.ai/api
+# (the key issued on app.telem.ai only works on router.telem.ai).
+TELEM_BASE = os.environ.get("TELEM_BASE_URL", "https://router.telem.ai")
 TAVILY_BASE = "https://api.tavily.com"
 
 app = FastAPI(title="annealed-search")
