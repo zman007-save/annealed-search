@@ -35,7 +35,12 @@ Exposes the Tavily search controls from the kickoff slides as UI parameters —
 - **Mantra search** — the original prompt is repeated per article to score
   grounding/reliability.
 - **Meta-search** — merges an extra pass with the opposite parameter profile
-  and ranks across both.
+  and ranks across both. Articles found by both a wave round and the meta
+  pass earn the +0.05 cross-validation bonus in the net score (below).
+- **Net score** — one combined number per article: `net = relevance −
+  redundancy_avg + meta bonus + wave bonus`. Meta bonus +0.05 for
+  cross-validation (wave + meta); wave bonus +0.01 per extra distinct wave
+  round, max +0.05. The top 10 is ranked by net score.
 
 ## QUBO mapping
 
@@ -50,6 +55,15 @@ best set:
   each other out of the set.
 - Objective: minimize energy. Solved with
   `dwave.samplers.SimulatedAnnealingSampler`, 100 reads, on CPU.
+- Net score (display ranking, same combined signal approximately): `net =
+  relevance − redundancy_avg + meta bonus + wave bonus`, where
+  `redundancy_avg` is the article's mean Jaccard similarity to the other
+  articles (same similarities, same 0.05 threshold as the QUBO couplings),
+  meta bonus is +0.05 for articles found by both a wave round and the meta
+  pass, and wave bonus is +0.01 per extra distinct wave round (max +0.05).
+  Approximately: the QUBO penalizes similarity to the *selected* set, net
+  penalizes mean similarity to *all* articles — see the combined-score run
+  below for what that difference does to the top 10 vs the best set.
 
 ## Problems it addresses (kickoff slides)
 
@@ -76,9 +90,13 @@ Get a Telem key at https://app.telem.ai (sign in → project → API keys);
 the Tavily key is in the Tavily dashboard. All participants get $100 of
 Telem credits.
 
-The dashboard shows the scores of ALL articles (relevance, mantra
-grounding, reliability badge, selected or not) plus a Top 10 list per
-search.
+The dashboard leads with the annealer's answer: the headline list is the
+best set itself, ranked by net score within the set. Below it, a separate
+"Highest scoring individuals" section shows the top 10 by net score as
+individuals — explicitly not the set. Every card in both lists shows all
+component scores (Tavily, mantra grounding, combined relevance, redundancy,
+meta/wave bonuses, net) plus its bell-curve grade. The full pool follows
+under "All articles".
 
 ## Verified live test — 1,010 articles (Nov 14, ~12:53pm PT)
 
@@ -144,6 +162,54 @@ top-10 slots. Observed end to end:
 - As in the unfiltered run, none of the top 10 made the best set — the
   52-article best set is drawn entirely from outside the top 10. Mantra
   grounding is still 1.0 across the whole top 10.
+
+## Verified live test — 1,010 articles, combined net score (Nov 14, ~1:22pm PT)
+
+Same prompt and settings as the filtered run — **"AI search agents 2026"**
+(advanced depth, 40 wave rounds, max_results 50, mantra + meta-search on) —
+with one change: every article now carries ONE combined net score, and the
+top 10 is ranked by it instead of by relevance alone:
+
+**net = relevance − redundancy_avg + meta bonus + wave bonus**, where
+relevance = 0.6 × Tavily + 0.4 × mantra grounding; redundancy_avg is the
+article's mean Jaccard similarity to the other articles (same similarities
+and same 0.05 coupling threshold as the QUBO); meta bonus is +0.05 for
+articles found by BOTH a wave round and the meta pass (opposite profile —
+cross-validation, tracked from real ingest provenance, not guessed); wave
+bonus is +0.01 per extra distinct wave round, max +0.05. Both bonuses are
+small nudges by design — relevance and redundancy stay the main terms.
+Every component stays visible per article in the API and the dashboard.
+The Tavily parameter controls (search_depth, time_range, etc.) are NOT a
+score component — they are retrieval knobs that shape the pool, not
+properties of an article.
+
+Observed end to end:
+
+- **926 unique candidates** (33 extracted), 136 found by the meta pass,
+  61 cross-validated (wave + meta), 231 in 2+ distinct wave rounds.
+- QUBO: **926 variables, 184,278 redundancy couplings, 100 annealing
+  reads, best energy −9.8576, 53 articles in the best set, 10/100 reads
+  converged to the optimum.** Total: ~36.5 s.
+- Top 10 by net score: 0.847–0.921, all High reliability, all real articles
+  from ten distinct domains. Ranks 1–6 all earned the +0.05 meta bonus;
+  ranks 1–3 and 5 also earned the full +0.05 wave bonus (12–14 distinct
+  rounds each). Net-score distribution for the run: mean 0.596, σ 0.171.
+- **Honest result: the overlap is still 0/10.** None of the new top 10
+  made the best set. The best-selected article by net ranks 22nd; only 1
+  selected article is in the top 25 by net, 3 in the top 50, 8 in the top
+  100. The best set's mean net (0.657) is above the run mean (0.596), but
+  the head of the net ranking and the annealer's set still diverge.
+- Why: net uses redundancy_avg — the MEAN similarity to all 925 other
+  articles — which barely varies among top articles (0.052–0.064), because
+  most pairwise similarities are zero. So net is still mostly a relevance
+  ranking with a bonus tilt. The annealer, by contrast, penalizes
+  similarity to the *selected* articles specifically (1.2 × pairwise
+  Jaccard): one near-twin (redundancy_max 0.12–0.23 for the top 10) is
+  enough to knock a top article out. Net is a per-article standalone
+  approximation; the QUBO is a joint optimization over the set — "good on
+  its own" vs "a good addition to this set". The likely next step, if the
+  lists should agree: rank by redundancy_max (worst twin) instead of the
+  mean. Log: `runs/run-1000-combined-2026-11-14.json`.
 
 ## Verified live test (Nov 14, ~12:20pm PT)
 

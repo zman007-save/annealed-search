@@ -11,6 +11,13 @@ https://github.com/zman007-save/annealed-search
   scored by token overlap with the article. Reliability badge: High / Medium /
   Low.
 - Relevance per article = 0.6 * Tavily score + 0.4 * mantra grounding.
+- Net score per article (from Run 5c on) = relevance − redundancy_avg
+  (mean Jaccard similarity to the other articles) + meta bonus + wave
+  bonus. Meta bonus +0.05 for articles found by BOTH a wave round and the
+  meta pass (opposite profile — cross-validation, tracked at ingest).
+  Wave bonus +0.01 per extra distinct wave round, max +0.05. The top 10
+  is ranked by net score from Run 5c on; earlier runs ranked it by
+  relevance. Every component stays visible per article.
 - QUBO: one binary variable per article. Linear term h_i = 0.45 − relevance_i
   (0.45 is the cost of picking an article). Quadratic term
   J_ij = 1.2 * Jaccard(title+text tokens of i, j) when similarity > 0.05
@@ -202,13 +209,73 @@ outside the top 10. Mantra grounding is still 1.0 across the whole top 10.
   which the title-Jaccard rule then collapsed. Log:
   runs/run-1000-filtered-v2-2026-11-14.json.
 
+## Run 5c — "AI search agents 2026" (combined net score, 926 articles)
+
+Same prompt and settings as Run 5b, ~1:22pm PT, with one change: every
+article now carries ONE combined net score and the top 10 is ranked by it.
+
+**net = relevance − redundancy_avg + meta bonus + wave bonus.** Meta bonus
++0.05 for articles found by BOTH a wave round and the meta pass (opposite
+profile — cross-validation, tracked from real ingest provenance: the meta
+results are now ingested separately instead of being merged into the wave
+rounds). Wave bonus +0.01 per extra distinct wave round, max +0.05
+(distinct rounds are tracked at ingest — dedupe used to throw reappearances
+away). Both bonuses are small nudges by design. The Tavily parameter
+controls are NOT a score component: they shape the pool, not the article.
+
+- Candidates: 926 unique (33 extracted). Meta pass found 136 of them;
+  61 cross-validated (wave + meta); 231 in 2+ distinct wave rounds.
+- QUBO: 926 variables, 184,278 redundancy couplings, 100 annealing reads.
+- Best energy: −9.8576. Best set: 53 articles. Converged: 10/100 reads.
+- Total run time: ~36.5 s.
+- Reliability: 563 High / 305 Medium / 58 Low.
+- Net-score distribution: mean 0.596, σ 0.171 (n=926); range −0.001 to 0.921.
+
+### Top 10 by net score (all High, all real articles, ten distinct domains)
+
+| Rank | Net | Rel. | Red. avg | Meta+ | Wave+ | Rounds | Article | Selected |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0.921 | 0.881 | 0.060 | 0.05 | 0.05 | 12 | AI Search Agents in 2026: The Future of Google Search \| Xenors — https://xenors.in/tech/ai-search-agents-future-of-search-2026 | No |
+| 2 | 0.884 | 0.844 | 0.060 | 0.05 | 0.05 | 14 | 7 Best AI Search Engines for Developers & AI Agents (2026) \| TinyFish Blog — https://www.tinyfish.ai/blog/best-ai-search-engine | No |
+| 3 | 0.881 | 0.836 | 0.055 | 0.05 | 0.05 | 13 | Best Web Search APIs & MCPs for AI Agents 2026 — https://www.vellum.ai/blog/best-web-search-apis-and-mcps-for-ai-agents | No |
+| 4 | 0.875 | 0.882 | 0.057 | 0.05 | 0.00 | 1 | Get Cited by AI in 60 Days. AI Search Trends 2026 for Teams - Cairrot — https://cairrot.com/blog/ai-search-trends | No |
+| 5 | 0.873 | 0.837 | 0.064 | 0.05 | 0.05 | 12 | The 10 Best AI Agent Search Tools (August 2026): Features, Tradeoffs, and Use Cases — https://mastra.ai/articles/best-ai-agent-search-tools | No |
+| 6 | 0.859 | 0.861 | 0.062 | 0.05 | 0.01 | 2 | Ai agents news 2026: Key Trends and Developments- Drive Cool Cars — https://drivecoolcars.co.uk/ai-agents-news-2026 | No |
+| 7 | 0.857 | 0.868 | 0.061 | 0.00 | 0.05 | 14 | Best AI Search Engines for Agents and Workflows in 2026 — https://www.firecrawl.dev/blog/best-ai-search-engines-agents | No |
+| 8 | 0.852 | 0.906 | 0.054 | 0.00 | 0.00 | 1 | Google I/O 2026: Google Revamps Search Experience With AI Agents, Multi-Modal Queries \| Technology News — https://www.gadgets360.com/ai/news/google-io-2026-search-box-ai-agents-multi-modal-queries-gemini-11521202 | No |
+| 9 | 0.852 | 0.906 | 0.054 | 0.00 | 0.00 | 1 | AI search news June 2026: Google agents and fragmentation — https://www.bushnote.com/articles/ai-search-news-june-2026 | No |
+| 10 | 0.847 | 0.899 | 0.052 | 0.00 | 0.00 | 1 | AI News May 21 2026: Google IO Gemini 3.5 & AI Search Agents — https://mrreviewai.com/ai-news-digest-may-21-2026 | No |
+
+### Honest result: top-10 / best-set overlap is still 0/10
+
+None of the new top 10 made the best set. The best-selected article by net
+ranks 22nd; only 1 selected article is in the top 25 by net, 3 in the top
+50, 8 in the top 100. The best set's mean net (0.657) is above the run mean
+(0.596), but the head of the net ranking and the annealer's set still
+diverge. Only 1 of the 53 selected articles is cross-validated and only 8
+carry a wave bonus — the bonuses lift articles up the net ranking, but the
+annealer still does not select them.
+
+Why: net uses redundancy_avg — the MEAN similarity to all 925 other
+articles — which barely varies among top articles (0.052–0.064), because
+most pairwise similarities are zero. So net is still mostly a relevance
+ranking with a bonus tilt. The annealer penalizes similarity to the
+*selected* articles specifically (1.2 × pairwise Jaccard): one near-twin
+(redundancy_max 0.121–0.227 for the top 10) is enough to knock a top
+article out. Net is a per-article standalone approximation; the QUBO is a
+joint optimization over the set — "good on its own" vs "a good addition to
+this set". Likely next step if the lists should agree: rank by
+redundancy_max (worst twin) instead of the mean. Log:
+runs/run-1000-combined-2026-11-14.json.
+
 ## How to add a new result (running-document protocol)
 
 1. Run the query in the dashboard (or via the API) and record: prompt,
    settings (depth, wave rounds, mantra/meta on/off), candidates retrieved,
    extracted, QUBO variables/couplings, best energy, convergence (x/100),
    best-set size, run time, reliability counts.
-2. Record the top 10 by relevance with scores and selected/not.
+2. Record the top 10 by net score (by relevance for runs before 5c) with
+   scores and selected/not.
 3. Note anything the run proves (e.g. duplicates excluded, grounding
    behaviour) and any caveat.
 4. Append as a new use-case section; do not rewrite earlier sections.

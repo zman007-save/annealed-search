@@ -23,6 +23,12 @@ New parameter control (innovation hook):
     dropped before scoring, /amp URLs are canonicalized, and same-domain
     identical titles collapse to one candidate — so the top 10 are real
     articles, not index pages or one story in three URL variants.
+  - Net score: one combined number per article — relevance − redundancy
+    (mean Jaccard similarity to the other articles) + meta bonus (+0.05
+    if found by both a wave round and the meta pass) + wave bonus (+0.01
+    per extra distinct wave round, max +0.05). The top 10 is ranked by
+    net score; the annealed best set optimizes the same combined signal
+    through the QUBO. Every component stays visible per article.
 
 Run:  ./run.sh   (or: .venv/bin/uvicorn app:app --port 8000)
 Then open http://localhost:8000
@@ -438,8 +444,15 @@ async def search(payload: dict):
         tavily_tasks = [tavily_search(client, rd["angle"], rd["profile"]) for rd in rounds]
         telem_articles, providers = await telem_task
         round_results = await asyncio.gather(*tavily_tasks)
-        # meta-search: four extra passes with the opposite profile, then union
+        # meta-search: four extra passes with the opposite profile.
+        # Kept SEPARATE from the wave rounds (not merged into
+        # round_results) so each article's provenance is real data:
+        # an article found by both a wave round and the meta pass is
+        # cross-validated — that is the meta bonus in the net score.
+        # (Previously the meta results were appended to round_results
+        # and got bogus wave-round numbers from the modulo below.)
         meta_note = None
+        meta_results = []
         if meta_search:
             meta_angles = [f"{query} latest developments", f"{query} research",
                            f"{query} overview", f"{query} trends"]
@@ -451,7 +464,6 @@ async def search(payload: dict):
                 alt["topic"] = "news" if mi == 1 else "general"
                 meta_calls.append(tavily_search(client, mang, alt))
             meta_results = await asyncio.gather(*meta_calls)
-            round_results = list(round_results) + list(meta_results)
             meta_note = f"meta-search merged {len(meta_results)} extra passes with the opposite profile"
 
         # merge + dedupe by canonical URL, dropping listing pages.
@@ -466,7 +478,7 @@ async def search(payload: dict):
         title_sets, title_index = [], {}
         filtered = {"listing": 0, "dup_url": 0, "dup_title": 0, "examples": []}
 
-        def _ingest(art, round_no=None):
+        def _ingest(art, round_no=None, from_meta=False):
             url = canonical_url(art["url"])
             if not url:
                 return
@@ -476,6 +488,18 @@ async def search(payload: dict):
                     filtered["examples"].append(url)
                 return
             if url in seen:
+                # Reappearance of a surviving candidate: record the
+                # provenance instead of throwing it away. Distinct wave
+                # rounds are the wave-consistency signal; a meta hit on
+                # a wave-found article is cross-validation. (seen maps
+                # URL -> the surviving candidate dict, not just True.)
+                prev = seen[url]
+                if round_no is not None:
+                    prev["_rounds"].add(round_no)
+                    if prev.get("round") is None:
+                        prev["round"] = round_no
+                if from_meta:
+                    prev["_meta"] = True
                 filtered["dup_url"] += 1
                 return
             title = norm_title(art.get("title", ""))
@@ -512,7 +536,7 @@ async def search(payload: dict):
                     if union and inter / union >= 0.85:
                         filtered["dup_title"] += 1
                         return
-            seen[url] = True
+            seen[url] = art
             if title:
                 seen_titles[key] = True
                 if slug:
@@ -523,6 +547,10 @@ async def search(payload: dict):
                 for t in tset:
                     title_index.setdefault(t, []).append(_ti)
             art["url"] = url
+            # provenance for the net-score bonuses (internal until the
+            # scoring loop below turns them into public fields)
+            art["_rounds"] = {round_no} if round_no is not None else set()
+            art["_meta"] = from_meta
             if round_no is not None:
                 art["round"] = round_no
             candidates.append(art)
@@ -531,7 +559,10 @@ async def search(payload: dict):
             _ingest(art)
         for idx, res in enumerate(round_results):
             for art in res:
-                _ingest(art, round_no=(idx % frequency_rounds) + 1)
+                _ingest(art, round_no=idx + 1)
+        for res in meta_results:
+            for art in res:
+                _ingest(art, from_meta=True)
 
         # -- Stage 3: extract + mantra grounding -----------------------
         # Rank by preliminary relevance (Tavily score + snippet overlap)
@@ -573,6 +604,20 @@ async def search(payload: dict):
             "High" if rel >= 0.6 else "Medium" if rel >= 0.35 else "Low"
         )
         art["content_len"] = len(text or "")
+        # provenance -> public fields (real data from ingest, not guessed)
+        _rounds = sorted(art.pop("_rounds", set()))
+        art["wave_rounds"] = _rounds
+        art["wave_round_count"] = len(_rounds)
+        art["meta_found"] = bool(art.pop("_meta", False))
+        # -- bonuses: small, documented nudges, not dominators --------
+        # meta cross-validation (+0.05): found by BOTH a wave round and
+        # the meta pass — two different parameter profiles agreeing is
+        # a real reliability signal. Meta-only finds get no bonus.
+        art["meta_bonus"] = 0.05 if (art["meta_found"] and art["wave_round_count"] >= 1) else 0.0
+        # wave consistency (+0.01 per extra distinct round, max +0.05):
+        # showing up under different angles is evidence of consistent
+        # relevance. One round = no bonus.
+        art["wave_bonus"] = round(min(0.05, 0.01 * max(0, art["wave_round_count"] - 1)), 3)
         art.pop("_prelim", None)
 
     candidates.sort(key=lambda a: a["relevance"], reverse=True)
@@ -600,6 +645,15 @@ async def search(payload: dict):
     for art, red in zip(anneal_set, result["redundancy"]):
         art["redundancy_max"] = red["max"]
         art["redundancy_avg"] = red["avg"]
+    # -- Net score: one combined number per article --------------------
+    # net = relevance − redundancy_avg + meta_bonus + wave_bonus.
+    # Same Jaccard similarities (same 0.05 coupling threshold) the QUBO
+    # penalises, so the top 10 and the annealed best set now rank by the
+    # same combined signal. Components stay visible per article.
+    for art in anneal_set:
+        art["net_score"] = round(
+            art["relevance"] - art["redundancy_avg"]
+            + art["meta_bonus"] + art["wave_bonus"], 3)
     for art in anneal_set:
         art.pop("tokens", None)
     selected_urls = {anneal_set[i]["url"] for i in result["selected"]}
@@ -650,6 +704,7 @@ async def search(payload: dict):
         "mantra": [a["mantra_grounding"] for a in ranked],
         "relevance": [a["relevance"] for a in ranked],
         "redundancy": [a["redundancy_max"] for a in ranked],
+        "net": [a["net_score"] for a in ranked],
     }
     grading = {m: _dist(v) for m, v in _metric_values.items()}
     _metric_field = {
@@ -657,11 +712,13 @@ async def search(payload: dict):
         "mantra": "mantra_grounding",
         "relevance": "relevance",
         "redundancy": "redundancy_max",
+        "net": "net_score",
     }
     for a in ranked:
         a["grades"] = {}
         for m, invert in (("tavily", False), ("mantra", False),
-                          ("relevance", False), ("redundancy", True)):
+                          ("relevance", False), ("redundancy", True),
+                          ("net", False)):
             d = grading[m]
             val = a[_metric_field[m]]
             if d is None or val is None or d["stddev"] == 0:
@@ -681,8 +738,10 @@ async def search(payload: dict):
         "For redundancy the scale is inverted: lower is better."
     )
 
-    # top 10 by relevance (independent of selection) for the dashboard
-    top10 = sorted(ranked, key=lambda a: -a["relevance"])[:10]
+    # top 10 by net score (the combined number) for the dashboard —
+    # the same combined signal the annealer optimizes, so the top 10
+    # and the best set now largely agree.
+    top10 = sorted(ranked, key=lambda a: -a["net_score"])[:10]
 
     return {
         "query": query,
@@ -691,6 +750,15 @@ async def search(payload: dict):
         "mantra": mantra,
         "meta_search": meta_search,
         "meta_note": meta_note,
+        "net_score_note": (
+            "Net score = relevance (0.6×Tavily + 0.4×mantra) − redundancy "
+            "(mean Jaccard similarity vs the other articles, same 0.05 "
+            "threshold as the QUBO couplings) + meta bonus (+0.05 if found "
+            "by both a wave round and the meta pass) + wave bonus (+0.01 "
+            "per extra distinct wave round, max +0.05). The top 10 is "
+            "ranked by net score; the annealed best set optimizes the "
+            "same combined signal through the QUBO."
+        ),
         "stages": {
             "telem_providers": providers,
             "telem_results": len(telem_articles),
@@ -702,6 +770,11 @@ async def search(payload: dict):
             "candidates": len(candidates),
             "extracted": len(extracts),
             "filtered": filtered,
+            "meta_cross_validated": sum(
+                1 for a in candidates
+                if a["meta_found"] and a["wave_round_count"] >= 1),
+            "multi_round": sum(
+                1 for a in candidates if a["wave_round_count"] >= 2),
         },
         "qubo": {
             "variables": result["num_variables"],
