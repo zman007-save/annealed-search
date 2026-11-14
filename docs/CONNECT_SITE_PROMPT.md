@@ -14,6 +14,23 @@ Please connect the real annealed-search pipeline to the annealsearch site, repla
 
 Don’t paste the keys into this chat. Muse should use the hosting service’s secure secret-entry controls.
 
+## Where the keys are — and aren't
+
+- The repo has NO GitHub Actions secrets and NO Codespaces secrets, by
+  design. Do not look for keys there and do not add them there.
+- The keys live only in the project's local `.env` (gitignored, never
+  committed) and in the Telem/Tavily provider dashboards.
+- For the hosted site: ask Zach to enter `TELEM_API_KEY` and
+  `TAVILY_API_KEY` through the hosting platform's secure secret-entry
+  flow, as server-side env vars only. Never ask for key values in chat,
+  and never put them in the repo, the frontend, logs, or screenshots.
+- Telem endpoint for the hosted site: set
+  `TELEM_BASE_URL=https://hack.telem.ai/api` (the hackathon dedicated
+  server — the key issued on app.telem.ai does NOT work there; it returns
+  401). A new key for hack.telem.ai is being issued; use the key Zach
+  enters in the hosting environment and verify it returns 200 before
+  going live. The Tavily key is unchanged.
+
 ## Repo pointers for the builder
 
 - Backend: `app.py` (FastAPI, serves the dashboard from `static/`). Run locally with `./run.sh`, then open http://localhost:8000.
