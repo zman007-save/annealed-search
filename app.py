@@ -24,7 +24,8 @@ New parameter control (innovation hook):
     identical titles collapse to one candidate — so the top 10 are real
     articles, not index pages or one story in three URL variants.
   - Net score: one combined number per article — relevance − redundancy
-    (mean Jaccard similarity to the other articles) + meta bonus (+0.05
+    (worst-twin Jaccard similarity: the single most similar other article)
+    + meta bonus (+0.05
     if found by both a wave round and the meta pass) + wave bonus (+0.01
     per extra distinct wave round, max +0.05). The top 10 is ranked by
     net score; the annealed best set optimizes the same combined signal
